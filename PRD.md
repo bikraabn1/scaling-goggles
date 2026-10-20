@@ -1,122 +1,112 @@
 # Product Requirement Document (PRD)
-## Project: Ngabsennn (Phase 1 - Daily Report Generator)
+## Project: Ngabsennn (Daily Intern Report & MagangHub Monev Automation)
 
 ---
 
 ### 1. Overview & Objective
-**Ngabsennn** adalah platform internal pribadi untuk mengotomatisasi pembuatan draf laporan harian magang.
-Fokus **Phase 1** adalah:
-- Mengambil log commit hari ini dari GitLab instansi (**GitLab Perpuskita**).
-- Meng-generate 3 komponen laporan resmi magang via LLM dengan batasan karakter ketat (150 - 200 huruf per poin).
-- Menyediakan UI modern, bersih, no-gradient, menggunakan standar Shadcn UI (`base-nova` preset / neutral palette).
-- Menyediakan fitur single-password auth via `.env` dan one-click copy untuk memudahkan input ke platform monev.
-*(Fitur auto-post ke Monev Maganghub diparkir untuk Phase 2).*
+**Ngabsennn** adalah platform otomatisasi presensi dan penyusunan draf laporan harian magang nasional (Monev MagangHub Kemnaker).
+Platform ini menyelesaikan kendala repetitive manual kerja harian peserta magang:
+1. Mengambil log commit pengerjaan kode harian dari **GitLab** secara otomatis (zona waktu WIB / UTC+7).
+2. Meringkas commit menjadi draf laporan formal terstruktur melalui model bahasa (LLM) dengan batasan karakter ketat (150 – 200 huruf per bagian).
+3. Mengotentikasi peserta langsung ke **Identity Provider resmi Kemnaker (SIAPkerja SSO)** tanpa menyimpan kredensial/password di server atau database.
+4. Melakukan pengiriman presensi harian (GPS check-in + 3 poin laporan) langsung ke API Monev MagangHub Kemnaker secara one-click dengan konfirmasi modal.
+5. Mendukung rotasi token otomatis (*refresh token rotation*) hingga 30 hari tanpa perlu login berulang.
 
 ---
 
 ### 2. User Persona & Scope
-- **User**: Single user (magang pribadi).
-- **Deployment**: Vercel (Edge/Node Serverless SSR via React Router v7).
-- **Security**: Single static password protection via `.env`.
+- **Current Persona**: Peserta magang Kemnaker / MagangHub yang bekerja menggunakan GitLab dan wajib mengisi log harian monev setiap hari kerja.
+- **Platform Scope**: Web application mobile-first responsive (dioptimalkan untuk akses via smartphone maupun laptop).
+- **Security Scope**: Zero-credential storage (password hanya digunakan saat proses handshake OAuth2 Kemnaker lalu dibuang; token disimpan di signed encrypted HTTP-only session cookie).
 
 ---
 
-### 3. Core Features (Phase 1)
+### 3. Current Implemented Features
 
-#### 3.1. Authentication (App Access Guard)
-- **Mechanism**: Single password gate.
-- **Config**: `APP_PASSWORD` di `.env`.
-- **Session**: Signed HTTP-only cookie via React Router session storage.
-- **UI**: Minimalist clean login screen jika cookie session tidak valid / expired.
+#### 3.1. Official Kemnaker SIAPkerja SSO Handshake
+- **Handshake Flow**:
+  1. `GET https://account.kemnaker.go.id/auth` untuk mengambil session cookie & CSRF token.
+  2. `POST https://account.kemnaker.go.id/auth/login` memvalidasi username/email & password.
+  3. Mengambil OAuth `code` dan `state` via redirect authorize.
+  4. Callback exchange ke `https://monev-api.maganghub.kemnaker.go.id/api/v1/auth/login/callback` dengan cookie `monev_oauth_state`.
+- **Token Management**:
+  - `access_token` (JWT, berlaku 6 jam).
+  - `monev_refresh_token` (berlaku 30 hari).
+  - Nama dan ID peserta magang resmi ditampilkan di dashboard header.
+- **Silent Auto-Refresh**:
+  - Jika `access_token` kedaluwarsa saat aksi submit, sistem otomatis memanggil `POST /api/v1/auth/refresh` menggunakan `monev_refresh_token` dan menyimpan token baru ke session tanpa menginterupsi pengguna.
 
 #### 3.2. GitLab Commit Harvester
-- **Target**: GitLab API (v4) instance Perpuskita.
-- **Config**: 
-  - `GITLAB_BASE_URL` (contoh: `https://gitlab.perpuskita.com` atau domain internal).
-  - `GITLAB_PROJECT_ID` (ID repo atau URL-encoded path).
-  - `GITLAB_TOKEN` (Personal Access Token dengan scope `read_api` / `read_repository`).
-  - `GITLAB_AUTHOR_EMAIL` atau `GITLAB_AUTHOR_NAME` (opsional jika token sudah spesifik akun).
-- **Filter Logika**:
-  - `since`: Awal hari ini (00:00:00 WIB / UTC+7).
-  - `until`: Sekarang.
-  - Skip merge commit (`Merge branch...`) dan commit kosong.
-  - Hanya ambil pesan commit (`commit.title` & `commit.message`), tidak mengambil git diff demi efisiensi token & privasi.
+- Mengambil commit dari GitLab API v4 (`/projects/:id/repository/commits`).
+- Mendukung self-signed SSL/internal instance via undici dispatcher.
+- Filter tanggal berbasis WIB (UTC+7) mulai pukul 00:00:00 WIB hari berjalan.
+- Filter author (email atau display name pengguna) agar tidak tercampur di repo tim/kolaboratif.
+- Tabs switchable: **Hari Ini** vs **5 Commit Terakhir** (memudahkan generate jika belum ada commit baru di hari bersangkutan).
+- Commit badges visual (Conventional Commits: `feat`, `fix`, `refactor`, `chore`, `docs`, dll).
 
 #### 3.3. AI Daily Report Generator
-- **Provider**: OpenRouter / Anthropic / Groq / OpenAI (dapat dikonfigurasi via env, misal `LLM_API_KEY`, `LLM_MODEL`).
-- **Prompt Spec**:
-  - Input: List commit message hari ini.
-  - Bahasa: Bahasa Indonesia formal, profesional, dan padat.
-  - Output Schema: JSON terstruktur.
-- **Batasan Karakter (Strict Constraint)**:
-  1. **Uraian Kegiatan**: Rangkuman pekerjaan teknis (150 - 200 karakter).
-  2. **Pembelajaran yang Diperoleh**: Insight teknis atau pemahaman sistem/flow yang didapat (150 - 200 karakter).
-  3. **Kendala**: Masalah yang dihadapi atau "Tidak ada kendala yang berarti dalam pengerjaan tugas hari ini" jika lancar (150 - 200 karakter).
-- **Character Counter**: UI wajib menampilkan live badge counter karakter (contoh: `178 / 200 karakter`, status: valid/warning jika di luar 150-200).
+- Engine: OpenAI-compatible endpoint (Google Gemini, Groq, Kenari, OpenRouter, dll).
+- Constraint karakter ketat:
+  1. **Uraian Kegiatan**: 150 – 200 karakter.
+  2. **Pembelajaran**: 150 – 200 karakter.
+  3. **Kendala**: 150 – 200 karakter.
+- Real-time character counter & status validasi visual.
+- Tombol One-Click Copy per bagian maupun gabungan.
 
-#### 3.4. Dashboard & Workspace UI
-- **Design System**: Shadcn UI (`base-nova`, neutral clean, border halus, flat/monochrome elegan, zero tacky gradients).
-- **App Icon & Favicon**: Minimalist SVG icon custom (ikon kalender/check/terminal monokrom).
-- **Komponen Dashboard**:
-  - **Header**: Nama app (`ngabsennn`), status tanggal hari ini (Format: `Senin, 19 Oktober 2026`), status sesi, tombol Logout.
-  - **Commit Preview Box**: List commit yang berhasil ditarik hari ini (bisa dicek ulang). Tombol "Fetch Commits" manual jika ada commit baru.
-  - **Action Button**: Tombol "Generate Laporan" (dengan loading spinner state).
-  - **Editor Form (3 Textarea)**:
-    - Textarea 1: Uraian Kegiatan + Live character counter (150-200 target).
-    - Textarea 2: Pembelajaran yang Diperoleh + Live character counter (150-200 target).
-    - Textarea 3: Kendala + Live character counter (150-200 target).
-  - **Copy Actions**:
-    - Tombol "Copy All" (format gabungan siap paste).
-    - Tombol "Copy" per masing-masing section.
+#### 3.4. Direct Monev MagangHub Submission
+- Endpoint: `POST https://monev-api.maganghub.kemnaker.go.id/api/v1/attendances/with-daily-log`.
+- Payload otomatis: `date` (WIB), `status: PRESENT`, koordinat kantor GPS (`latitude`, `longitude`), serta 3 poin laporan.
+- **Shadcn Confirmation Dialog**: Konfirmasi popup pra-kirim dengan preview teks dan jumlah huruf untuk mencegah salah submit.
+- **Shadcn Alerts**: Notifikasi feedback visual (sukses, error API, atau error autentikasi).
 
 ---
 
-### 4. Technical Architecture (React Router v7)
+### 4. Technical Architecture
 
 ```
 app/
 ├── components/
-│   ├── ui/               # Shadcn components (button, textarea, card, badge, dialog, etc.)
-│   ├── commit-list.tsx   # Tampilan list commit hari ini
-│   ├── report-form.tsx   # Form 3 textarea + live char counter + copy button
-│   └── navbar.tsx        # Minimal clean header
+│   ├── ui/                 # Shadcn UI primitives (alert, dialog, button, card, input, textarea, badge, etc.)
+│   ├── app-logo.tsx        # Vector monogram SVG app icon
+│   ├── commit-list.tsx     # Feed & table commit harvester + tabs filter
+│   └── report-form.tsx     # 3-field editor + live char counter + Shadcn confirmation dialog
 ├── lib/
-│   ├── auth.server.ts    # Cookie session & password check logic
-│   ├── gitlab.server.ts  # Fetcher commits dari GitLab API
-│   ├── llm.server.ts     # Caller LLM dengan structured output & length prompt
-│   └── utils.ts          # Helper classnames & formatters
+│   ├── auth.server.ts      # Encrypted session cookie management (30-day max-age)
+│   ├── gitlab.server.ts    # Fetcher commit GitLab API v4 + WIB time range filter
+│   ├── kemnaker-auth.server.ts # OAuth2 SSO handshake automation & refresh token handler
+│   ├── llm.server.ts       # LLM structured prompt generator
+│   ├── monev.server.ts     # MagangHub direct submission service
+│   └── utils.ts            # UI helper classnames
 ├── routes/
-│   ├── _index.tsx        # Redirect ke /dashboard atau /login
-│   ├── login.tsx         # Login gate (input password)
-│   ├── dashboard.tsx     # Main workbench (Loader commit, Action generate)
-│   └── api.generate.ts   # (Opsional) endpoint action jika via fetcher
-└── app.css               # Tailwind v4 + Shadcn base-nova variables
+│   ├── _index.tsx          # Root redirector
+│   ├── login.tsx           # SIAPkerja Kemnaker SSO login gate
+│   ├── logout.tsx          # Session destruction & sign-out handler
+│   └── dashboard.tsx       # Main workbench (commits, report editor, Monev actions)
+└── app.css                 # Tailwind v4 + Shadcn neutral color tokens
 ```
 
 ---
 
-### 5. Environment Variables
+### 5. Future Roadmap
 
-```env
-# App Security
-APP_PASSWORD=password_rahasia_kamu
-SESSION_SECRET=random_session_secret_min_32_chars
+#### Phase 3: Multi-User Architecture & Database Persistence
+- **Database**: SQLite (via Turso/libSQL untuk cloud edge, atau local SQLite) menggunakan **Drizzle ORM**.
+- **User Management**:
+  - Menyimpan profil peserta yang login (`user_id`, `name`, `email`).
+  - Menyimpan `monev_refresh_token` per user secara terenkripsi di database agar sesi background tetap berjalan.
+  - Dukungan multi-user: rekan magang lain dapat menggunakan satu deployment web app yang sama dengan akun SIAPkerja masing-masing.
+- **Config per User**:
+  - Masing-masing user dapat mengatur target GitLab Project ID, Personal Access Token, dan koordinat kantor mereka sendiri.
 
-# GitLab Perpuskita
-GITLAB_BASE_URL=https://gitlab.perpuskita.com
-GITLAB_PROJECT_ID=12345
-GITLAB_TOKEN=glpat-xxxxxxxxxxxxxxxxxxxx
-GITLAB_AUTHOR_NAME="Bikra" # atau email author
+#### Phase 4: Automated Webhook & Scheduled Auto-Submit (Cron)
+- **Daily Scheduled Job**:
+  - Cron trigger harian (misal pukul 14:00 atau 15:00 WIB).
+  - Mengambil commit hari itu secara headless → generate laporan via LLM → auto-submit presensi ke MagangHub menggunakan refresh token yang tersimpan di DB.
+- **Webhook Endpoint**:
+  - `POST /api/webhook/auto-submit` dilindungi oleh `WEBHOOK_SECRET` untuk integrasi dengan GitHub Actions, Cron-job.org, atau server crontab.
+- **Custom Schedule Settings**: Pengguna dapat memilih jam submit otomatis sesuai jam pulang kantor masing-masing.
 
-# LLM Generation
-LLM_API_KEY=sk-xxxx
-LLM_BASE_URL=https://openrouter.ai/api/v1 # atau direct provider
-LLM_MODEL=anthropic/claude-3.5-haiku # atau model hemat lainnya
-```
-
----
-
-### 6. Phase 2 Roadmap (Future Extension)
-- Simpan history draft ke Supabase / Turso.
-- Auto-post & token session handler ke API Monev Maganghub.
-- Cron trigger harian jam 17:00 WIB.
+#### Phase 5: History, Analytics & Notification
+- **History Laporan**: Dashboard riwayat presensi yang sudah disubmit ke MagangHub (status approval, draf log per tanggal).
+- **Multi-Repo GitLab**: Dukungan memanen commit dari lebih dari 1 repository sekaligus untuk digabungkan ke laporan harian.
+- **Notification Reminder**: Pengingat otomatis via WhatsApp (Fonnte/WA Gateway) atau Telegram Bot jika presensi belum terisi menjelang batas akhir harian.
