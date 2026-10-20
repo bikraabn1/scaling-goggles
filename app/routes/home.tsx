@@ -1,13 +1,15 @@
+import { redirect } from "react-router";
+import { getSession } from "~/lib/auth.server";
 import type { Route } from "./+types/home";
-import { Welcome } from "../welcome/welcome";
 
-export function meta({}: Route.MetaArgs) {
-  return [
-    { title: "New React Router App" },
-    { name: "description", content: "Welcome to React Router!" },
-  ];
+export async function loader({ request }: Route.LoaderArgs) {
+  const session = await getSession(request);
+  if (session.get("authenticated") === true) {
+    return redirect("/dashboard");
+  }
+  return redirect("/login");
 }
 
 export default function Home() {
-  return <Welcome />;
+  return null;
 }
