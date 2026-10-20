@@ -3,11 +3,12 @@ import { Form, useNavigation } from "react-router";
 import { requireUserSession } from "~/lib/auth.server";
 import { fetchTodayGitLabCommits } from "~/lib/gitlab.server";
 import { generateDailyReportFromCommits, type DailyReport } from "~/lib/llm.server";
+import { submitToMonevMagangHub, type MonevSubmissionResult } from "~/lib/monev.server";
 import { CommitList } from "~/components/commit-list";
 import { ReportForm } from "~/components/report-form";
 import { Button } from "~/components/ui/button";
 import { AppLogo } from "~/components/app-logo";
-import { Sparkles, RefreshCw, LogOut, Calendar, AlertTriangle } from "lucide-react";
+import { Sparkles, RefreshCw, LogOut, Calendar, AlertTriangle, CheckCircle2 } from "lucide-react";
 import type { Route } from "./+types/dashboard";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -25,12 +26,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     timeZone: "Asia/Jakarta",
   }).format(now);
 
+  const hasEnvToken = Boolean(process.env.MONEV_ACCESS_TOKEN?.trim());
+
   return {
     dateFormatted,
     commits: gitlabData.commits,
     recentCommits: gitlabData.recentCommits,
     filteredCount: gitlabData.filteredCount,
     gitlabError: gitlabData.error,
+    hasEnvToken,
   };
 }
 
@@ -70,12 +74,48 @@ export async function action({ request }: Route.ActionArgs) {
     return { report: result.report };
   }
 
+  if (intent === "submit_monev") {
+    const activity_log = formData.get("activity_log")?.toString() || "";
+    const lesson_learned = formData.get("lesson_learned")?.toString() || "";
+    const obstacles = formData.get("obstacles")?.toString() || "";
+    const customToken = formData.get("customToken")?.toString() || "";
+
+    const submission = await submitToMonevMagangHub({
+      activity_log,
+      lesson_learned,
+      obstacles,
+      customToken,
+    });
+
+    if (!submission.success) {
+      return {
+        monevError: submission.error || "Gagal mengirimkan laporan ke Monev MagangHub.",
+        report: {
+          uraian_kegiatan: activity_log,
+          pembelajaran: lesson_learned,
+          kendala: obstacles,
+        },
+      };
+    }
+
+    return {
+      monevSuccess: true,
+      monevData: submission.data,
+      report: {
+        uraian_kegiatan: activity_log,
+        pembelajaran: lesson_learned,
+        kendala: obstacles,
+      },
+    };
+  }
+
   return null;
 }
 
 export default function DashboardPage({ loaderData, actionData }: Route.ComponentProps) {
   const navigation = useNavigation();
   const isGenerating = navigation.state === "submitting" && navigation.formData?.get("intent") === "generate";
+  const isSubmittingMonev = navigation.state === "submitting" && navigation.formData?.get("intent") === "submit_monev";
 
   const [selectedSource, setSelectedSource] = useState<"today" | "recent">(
     loaderData.commits.length > 0 ? "today" : "recent"
@@ -94,7 +134,7 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-semibold tracking-tight">ngabsennn</h1>
               <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                v1.0
+                v1.1 • Monev Auto-Sync
               </span>
             </div>
           </div>
@@ -135,6 +175,32 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
             <div>
               <p className="font-medium">Gagal Generate Laporan</p>
               <p className="text-[11px] opacity-90 mt-0.5">{actionData.error}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Monev Submission Success Banner */}
+        {actionData?.monevSuccess && (
+          <div className="flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-800 dark:text-emerald-300 shadow-xs">
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-semibold text-sm text-emerald-700 dark:text-emerald-300">
+                Presensi & Log Harian Berhasil Disubmit ke MagangHub!
+              </p>
+              <p className="text-xs text-emerald-700/80 dark:text-emerald-400/80">
+                Status: <span className="font-bold">{actionData.monevData?.status}</span> • Approval: <span className="font-bold">{actionData.monevData?.approval_status}</span> (ID Presensi: {actionData.monevData?.id})
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Monev Submission Error Banner */}
+        {actionData?.monevError && (
+          <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-xs text-destructive shadow-xs">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-destructive mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-semibold text-sm">Gagal Mengirim ke Monev MagangHub</p>
+              <p className="text-xs opacity-90">{actionData.monevError}</p>
             </div>
           </div>
         )}
@@ -188,7 +254,12 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
 
         {/* Section 2: Report Form Workspace */}
         <div className="rounded-xl border border-border bg-card p-5 sm:p-6 shadow-xs">
-          <ReportForm key={report ? JSON.stringify(report) : "empty"} initialReport={report} />
+          <ReportForm
+            key={report ? JSON.stringify(report) : "empty"}
+            initialReport={report}
+            hasEnvToken={loaderData.hasEnvToken}
+            isSubmittingMonev={isSubmittingMonev}
+          />
         </div>
       </main>
     </div>

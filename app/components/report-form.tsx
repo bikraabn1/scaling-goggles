@@ -1,18 +1,28 @@
 import { useState } from "react";
-import { Check, Copy, AlertCircle, FileText, CheckCircle2 } from "lucide-react";
+import { Form } from "react-router";
+import { Check, Copy, AlertCircle, FileText, CheckCircle2, Send, Key, RefreshCw } from "lucide-react";
 import { Textarea } from "~/components/ui/textarea";
+import { Input } from "~/components/ui/input";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import type { DailyReport } from "~/lib/llm.server";
 
 interface ReportFormProps {
   initialReport?: DailyReport;
+  hasEnvToken?: boolean;
+  isSubmittingMonev?: boolean;
 }
 
-export function ReportForm({ initialReport }: ReportFormProps) {
+export function ReportForm({
+  initialReport,
+  hasEnvToken = false,
+  isSubmittingMonev = false,
+}: ReportFormProps) {
   const [kegiatan, setKegiatan] = useState(initialReport?.uraian_kegiatan || "");
   const [pembelajaran, setPembelajaran] = useState(initialReport?.pembelajaran || "");
   const [kendala, setKendala] = useState(initialReport?.kendala || "");
+  const [customToken, setCustomToken] = useState("");
+  const [showTokenInput, setShowTokenInput] = useState(!hasEnvToken);
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -67,6 +77,8 @@ export function ReportForm({ initialReport }: ReportFormProps) {
     );
   };
 
+  const canSubmit = kegiatan.trim().length > 0 && pembelajaran.trim().length > 0 && kendala.trim().length > 0;
+
   return (
     <div className="space-y-6">
       {/* Action Bar Header */}
@@ -82,27 +94,67 @@ export function ReportForm({ initialReport }: ReportFormProps) {
             Target ketat: 150 - 200 huruf per poin. Live indicator menandai kesesuaian draf.
           </p>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={copyAll}
-          disabled={!kegiatan && !pembelajaran && !kendala}
-          className="h-8 gap-1.5 text-xs font-medium self-start sm:self-auto cursor-pointer border-border hover:bg-muted"
-        >
-          {copiedKey === "all" ? (
-            <>
-              <Check className="h-3.5 w-3.5 text-emerald-500" />
-              <span className="text-emerald-600 dark:text-emerald-400 font-medium">Semua Tersalin!</span>
-            </>
-          ) : (
-            <>
-              <Copy className="h-3.5 w-3.5 text-blue-500" />
-              <span>Salin Semua (Format Monev)</span>
-            </>
-          )}
-        </Button>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={copyAll}
+            disabled={!kegiatan && !pembelajaran && !kendala}
+            className="h-8 gap-1.5 text-xs font-medium cursor-pointer border-border hover:bg-muted"
+          >
+            {copiedKey === "all" ? (
+              <>
+                <Check className="h-3.5 w-3.5 text-emerald-500" />
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">Semua Tersalin!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="h-3.5 w-3.5 text-blue-500" />
+                <span>Salin Semua</span>
+              </>
+            )}
+          </Button>
+
+          <button
+            type="button"
+            onClick={() => setShowTokenInput(!showTokenInput)}
+            className="flex h-8 items-center gap-1 rounded-md border border-border px-2 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer"
+            title="Pengaturan Token Monev MagangHub"
+          >
+            <Key className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Token</span>
+          </button>
+        </div>
       </div>
+
+      {/* Token Input Drawer/Collapse if needed */}
+      {showTokenInput && (
+        <div className="rounded-lg border border-border bg-muted/30 p-3.5 space-y-2 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-foreground flex items-center gap-1.5">
+              <Key className="h-3.5 w-3.5 text-amber-500" />
+              Bearer Token Monev MagangHub
+            </span>
+            {hasEnvToken && (
+              <Badge variant="secondary" className="text-[10px] bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                .env terpasang
+              </Badge>
+            )}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Token diambil dari header <code>Authorization: Bearer ...</code> di web MagangHub. Berlaku 6 jam.
+          </p>
+          <Input
+            type="password"
+            placeholder={hasEnvToken ? "Menggunakan token default dari .env (atau paste token baru di sini)" : "Paste Bearer token (eyJ...)"}
+            value={customToken}
+            onChange={(e) => setCustomToken(e.target.value)}
+            className="h-8 text-xs font-mono bg-background"
+          />
+        </div>
+      )}
 
       {/* Field 1: Uraian Kegiatan */}
       <div className="space-y-2">
@@ -219,6 +271,43 @@ export function ReportForm({ initialReport }: ReportFormProps) {
           rows={3}
           className="min-h-[92px] text-xs leading-relaxed resize-none bg-background focus-visible:ring-1 focus-visible:border-amber-500/50"
         />
+      </div>
+
+      {/* Form Submission to Monev MagangHub */}
+      <div className="pt-2 border-t border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <p className="text-[11px] text-muted-foreground">
+          Pastikan draf sudah sesuai sebelum menembak langsung ke server Monev Kemnaker.
+        </p>
+
+        <Form method="post" onSubmit={(e) => {
+          if (!confirm("Kirim langsung presensi & daily log hari ini ke Monev MagangHub Kemnaker?")) {
+            e.preventDefault();
+          }
+        }}>
+          <input type="hidden" name="intent" value="submit_monev" />
+          <input type="hidden" name="activity_log" value={kegiatan} />
+          <input type="hidden" name="lesson_learned" value={pembelajaran} />
+          <input type="hidden" name="obstacles" value={kendala} />
+          <input type="hidden" name="customToken" value={customToken} />
+
+          <Button
+            type="submit"
+            disabled={!canSubmit || isSubmittingMonev}
+            className="w-full sm:w-auto gap-2 text-xs font-semibold cursor-pointer shadow-sm bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white border-0 transition-all"
+          >
+            {isSubmittingMonev ? (
+              <>
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                <span>Mengirim ke MagangHub...</span>
+              </>
+            ) : (
+              <>
+                <Send className="h-3.5 w-3.5" />
+                <span>Kirim Langsung ke Monev MagangHub</span>
+              </>
+            )}
+          </Button>
+        </Form>
       </div>
     </div>
   );
