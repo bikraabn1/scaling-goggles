@@ -6,6 +6,7 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "~/components/ui/card";
 import { Lock, Mail, ArrowRight, ShieldAlert, CheckCircle2, ExternalLink } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { AppLogo } from "~/components/app-logo";
 import type { Route } from "./+types/login";
 
@@ -69,10 +70,13 @@ export default function LoginPage() {
           <Form method="post">
             <CardContent className="space-y-3.5">
               {actionData?.error && (
-                <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
-                  <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>{actionData.error}</span>
-                </div>
+                <Alert variant="destructive" className="py-2.5 px-3">
+                  <ShieldAlert className="h-4 w-4" />
+                  <AlertTitle className="text-xs font-semibold">Gagal Masuk</AlertTitle>
+                  <AlertDescription className="text-xs">
+                    {actionData.error}
+                  </AlertDescription>
+                </Alert>
               )}
 
               <div className="space-y-1.5">

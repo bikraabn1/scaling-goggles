@@ -9,6 +9,7 @@ import { ReportForm } from "~/components/report-form";
 import { Button } from "~/components/ui/button";
 import { AppLogo } from "~/components/app-logo";
 import { Sparkles, RefreshCw, LogOut, Calendar, AlertTriangle, CheckCircle2, User } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import type { Route } from "./+types/dashboard";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -185,50 +186,48 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
       <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 space-y-6">
         {/* Warning if GitLab API Error */}
         {loaderData.gitlabError && (
-          <div className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3.5 text-xs text-amber-700 dark:text-amber-400">
-            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium">Konfigurasi GitLab Belum Lengkap / Error</p>
-              <p className="text-[11px] opacity-90 mt-0.5">{loaderData.gitlabError}</p>
-            </div>
-          </div>
+          <Alert className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300">
+            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <AlertTitle className="text-xs font-semibold">Konfigurasi GitLab Belum Lengkap / Error</AlertTitle>
+            <AlertDescription className="text-xs text-amber-700/90 dark:text-amber-300/90">
+              {loaderData.gitlabError}
+            </AlertDescription>
+          </Alert>
         )}
 
         {/* Action Error if any */}
         {actionData?.error && (
-          <div className="flex items-start gap-3 rounded-lg border border-destructive/20 bg-destructive/10 p-3.5 text-xs text-destructive">
-            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium">Gagal Generate Laporan</p>
-              <p className="text-[11px] opacity-90 mt-0.5">{actionData.error}</p>
-            </div>
-          </div>
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle className="text-xs font-semibold">Gagal Generate Laporan</AlertTitle>
+            <AlertDescription className="text-xs">
+              {actionData.error}
+            </AlertDescription>
+          </Alert>
         )}
 
         {/* Monev Submission Success Banner */}
         {actionData?.monevSuccess && (
-          <div className="flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-800 dark:text-emerald-300 shadow-xs">
-            <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
-            <div className="space-y-1">
-              <p className="font-semibold text-sm text-emerald-700 dark:text-emerald-300">
-                Presensi & Log Harian Berhasil Disubmit ke MagangHub!
-              </p>
-              <p className="text-xs text-emerald-700/80 dark:text-emerald-400/80">
-                Peserta: <span className="font-bold">{loaderData.user.name}</span> • Status: <span className="font-bold">{actionData.monevData?.status}</span> • Approval: <span className="font-bold">{actionData.monevData?.approval_status}</span> (ID Presensi: {actionData.monevData?.id})
-              </p>
-            </div>
-          </div>
+          <Alert className="border-emerald-500/40 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 shadow-xs">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <AlertTitle className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+              Presensi & Log Harian Berhasil Disubmit ke MagangHub!
+            </AlertTitle>
+            <AlertDescription className="text-xs text-emerald-700/90 dark:text-emerald-400/90">
+              Peserta: <span className="font-bold text-foreground">{loaderData.user.name}</span> • Status: <span className="font-bold text-foreground">{actionData.monevData?.status}</span> • Approval: <span className="font-bold text-foreground">{actionData.monevData?.approval_status}</span> (ID Presensi: {actionData.monevData?.id})
+            </AlertDescription>
+          </Alert>
         )}
 
         {/* Monev Submission Error Banner */}
         {actionData?.monevError && (
-          <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-xs text-destructive shadow-xs">
-            <AlertTriangle className="h-5 w-5 shrink-0 text-destructive mt-0.5" />
-            <div className="space-y-1">
-              <p className="font-semibold text-sm">Gagal Mengirim ke Monev MagangHub</p>
-              <p className="text-xs opacity-90">{actionData.monevError}</p>
-            </div>
-          </div>
+          <Alert variant="destructive" className="shadow-xs">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle className="text-xs font-semibold">Gagal Mengirim ke Monev MagangHub</AlertTitle>
+            <AlertDescription className="text-xs">
+              {actionData.monevError}
+            </AlertDescription>
+          </Alert>
         )}
 
         {/* Section 1: GitLab Commits Harvester */}
