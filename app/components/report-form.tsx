@@ -1,10 +1,20 @@
 import { useState } from "react";
 import { Form } from "react-router";
-import { Check, Copy, AlertCircle, FileText, CheckCircle2, Send, Key, RefreshCw } from "lucide-react";
+import { Check, Copy, AlertCircle, FileText, CheckCircle2, Send, Key, RefreshCw, ShieldCheck } from "lucide-react";
 import { Textarea } from "~/components/ui/textarea";
 import { Input } from "~/components/ui/input";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "~/components/ui/dialog";
 import type { DailyReport } from "~/lib/llm.server";
 
 interface ReportFormProps {
@@ -23,6 +33,7 @@ export function ReportForm({
   const [kendala, setKendala] = useState(initialReport?.kendala || "");
   const [customToken, setCustomToken] = useState("");
   const [showTokenInput, setShowTokenInput] = useState(false);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -279,35 +290,90 @@ export function ReportForm({
           Pastikan draf sudah sesuai sebelum menembak langsung ke server Monev Kemnaker.
         </p>
 
-        <Form method="post" onSubmit={(e) => {
-          if (!confirm("Kirim langsung presensi & daily log hari ini ke Monev MagangHub Kemnaker?")) {
-            e.preventDefault();
-          }
-        }}>
-          <input type="hidden" name="intent" value="submit_monev" />
-          <input type="hidden" name="activity_log" value={kegiatan} />
-          <input type="hidden" name="lesson_learned" value={pembelajaran} />
-          <input type="hidden" name="obstacles" value={kendala} />
-          <input type="hidden" name="customToken" value={customToken} />
+        <Dialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
+          <DialogTrigger
+            render={
+              <Button
+                type="button"
+                disabled={!canSubmit || isSubmittingMonev}
+                className="w-full sm:w-auto gap-2 text-xs font-semibold cursor-pointer shadow-sm bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white border-0 transition-all"
+              >
+                {isSubmittingMonev ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>Mengirim ke MagangHub...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-3.5 w-3.5" />
+                    <span>Kirim Langsung ke Monev MagangHub</span>
+                  </>
+                )}
+              </Button>
+            }
+          />
 
-          <Button
-            type="submit"
-            disabled={!canSubmit || isSubmittingMonev}
-            className="w-full sm:w-auto gap-2 text-xs font-semibold cursor-pointer shadow-sm bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white border-0 transition-all"
-          >
-            {isSubmittingMonev ? (
-              <>
-                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                <span>Mengirim ke MagangHub...</span>
-              </>
-            ) : (
-              <>
-                <Send className="h-3.5 w-3.5" />
-                <span>Kirim Langsung ke Monev MagangHub</span>
-              </>
-            )}
-          </Button>
-        </Form>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                  <ShieldCheck className="h-4 w-4" />
+                </div>
+                <div>
+                  <DialogTitle className="text-sm font-semibold">Konfirmasi Presensi MagangHub</DialogTitle>
+                  <DialogDescription className="text-xs">
+                    Kirim laporan harian hari ini ke portal resmi Monev Kemnaker.
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+
+            <div className="space-y-2.5 rounded-lg border border-border bg-muted/40 p-3 text-xs">
+              <div className="space-y-0.5">
+                <span className="font-semibold text-foreground text-[11px]">1. Uraian Kegiatan ({kegiatan.length} huruf):</span>
+                <p className="line-clamp-2 text-muted-foreground text-[11px] font-mono">{kegiatan}</p>
+              </div>
+              <div className="space-y-0.5">
+                <span className="font-semibold text-foreground text-[11px]">2. Pembelajaran ({pembelajaran.length} huruf):</span>
+                <p className="line-clamp-2 text-muted-foreground text-[11px] font-mono">{pembelajaran}</p>
+              </div>
+              <div className="space-y-0.5">
+                <span className="font-semibold text-foreground text-[11px]">3. Kendala ({kendala.length} huruf):</span>
+                <p className="line-clamp-2 text-muted-foreground text-[11px] font-mono">{kendala}</p>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <DialogClose
+                render={
+                  <Button type="button" variant="ghost" size="sm" className="text-xs cursor-pointer">
+                    Batal
+                  </Button>
+                }
+              />
+
+              <Form
+                method="post"
+                onSubmit={() => setIsConfirmOpen(false)}
+              >
+                <input type="hidden" name="intent" value="submit_monev" />
+                <input type="hidden" name="activity_log" value={kegiatan} />
+                <input type="hidden" name="lesson_learned" value={pembelajaran} />
+                <input type="hidden" name="obstacles" value={kendala} />
+                <input type="hidden" name="customToken" value={customToken} />
+
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="w-full sm:w-auto gap-1.5 text-xs font-semibold cursor-pointer shadow-sm bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  <span>Ya, Kirim Sekarang</span>
+                </Button>
+              </Form>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
