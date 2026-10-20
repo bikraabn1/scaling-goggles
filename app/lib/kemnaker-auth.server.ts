@@ -3,42 +3,40 @@ import crypto from "crypto";
 export interface MonevAuthResult {
   success: boolean;
   access_token?: string;
+  refresh_token?: string;
   user_id?: string;
   name?: string;
   error?: string;
 }
 
+const USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
 /**
  * Automates full SSO OAuth2 login against Kemnaker Identity Provider
- * and exchanges code to obtain fresh MagangHub Monev Bearer access_token.
+ * and exchanges code to obtain fresh MagangHub Monev access_token AND 30-day refresh_token.
  */
-export async function authenticateKemnakerMonev(credentials?: {
-  email?: string;
-  password?: string;
+export async function authenticateKemnakerMonev(credentials: {
+  email: string;
+  password: string;
 }): Promise<MonevAuthResult> {
-  const username = credentials?.email?.trim() || process.env.KEMNAKER_EMAIL?.trim();
-  const password = credentials?.password?.trim() || process.env.KEMNAKER_PASSWORD?.trim();
+  const username = credentials.email.trim();
+  const password = credentials.password.trim();
 
   if (!username || !password) {
     return {
       success: false,
-      error: "Kredensial KEMNAKER_EMAIL dan KEMNAKER_PASSWORD belum diatur di .env",
+      error: "Email dan password Kemnaker wajib diisi.",
     };
   }
 
-  const userAgent =
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-
   try {
-    // Generate secure state for OAuth2 PKCE/CSRF state protection
     const state = crypto.randomBytes(32).toString("base64url");
     const authUrl = `https://account.kemnaker.go.id/auth?client_id=79230891-cc02-43c8-964c-b525bce27857&redirect_uri=https%3A%2F%2Fmonev.maganghub.kemnaker.go.id%2Fsso%2Fcallback&response_type=code&scope=basic%20email&state=${state}`;
 
     // Step 1: Initial GET to obtain session cookies and CSRF token
     const res1 = await fetch(authUrl, {
-      headers: {
-        "User-Agent": userAgent,
-      },
+      headers: { "User-Agent": USER_AGENT },
       redirect: "follow",
     });
 
@@ -78,7 +76,7 @@ export async function authenticateKemnakerMonev(credentials?: {
         Cookie: getCookieHeader(),
         Origin: "https://account.kemnaker.go.id",
         Referer: "https://account.kemnaker.go.id/auth/login",
-        "User-Agent": userAgent,
+        "User-Agent": USER_AGENT,
       },
       body: JSON.stringify({
         username,
@@ -105,7 +103,7 @@ export async function authenticateKemnakerMonev(credentials?: {
     const authRes2 = await fetch(authUrl, {
       headers: {
         Cookie: getCookieHeader(),
-        "User-Agent": userAgent,
+        "User-Agent": USER_AGENT,
       },
       redirect: "manual",
     });
@@ -140,7 +138,7 @@ export async function authenticateKemnakerMonev(credentials?: {
         Origin: "https://monev.maganghub.kemnaker.go.id",
         Referer: "https://monev.maganghub.kemnaker.go.id/",
         Cookie: `monev_oauth_state=${returnedState}`,
-        "User-Agent": userAgent,
+        "User-Agent": USER_AGENT,
       },
     });
 
@@ -155,16 +153,94 @@ export async function authenticateKemnakerMonev(credentials?: {
       };
     }
 
+    // Capture the 30-day monev_refresh_token from Set-Cookie header
+    let refreshToken: string | undefined;
+    const monevCookies = tokenRes.headers.getSetCookie?.() || [];
+    for (const cookieStr of monevCookies) {
+      const match = cookieStr.match(/monev_refresh_token=([^;]+)/);
+      if (match) {
+        refreshToken = match[1];
+        break;
+      }
+    }
+
     return {
       success: true,
       access_token: tokenData.access_token,
+      refresh_token: refreshToken,
       user_id: tokenData.user_id,
       name: tokenData.name,
     };
   } catch (err: any) {
     return {
       success: false,
-      error: `Gagal proses auto-login Kemnaker: ${err.message || String(err)}`,
+      error: `Gagal proses login Kemnaker: ${err.message || String(err)}`,
+    };
+  }
+}
+
+/**
+ * Refreshes an expired access_token using the 30-day monev_refresh_token
+ */
+export async function refreshMonevToken(
+  refreshToken: string
+): Promise<{
+  success: boolean;
+  access_token?: string;
+  refresh_token?: string;
+  error?: string;
+}> {
+  if (!refreshToken) {
+    return {
+      success: false,
+      error: "Refresh token tidak tersedia.",
+    };
+  }
+
+  try {
+    const res = await fetch(
+      "https://monev-api.maganghub.kemnaker.go.id/api/v1/auth/refresh",
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json, text/plain, */*",
+          Origin: "https://monev.maganghub.kemnaker.go.id",
+          Referer: "https://monev.maganghub.kemnaker.go.id/",
+          Cookie: `monev_refresh_token=${refreshToken}`,
+          "User-Agent": USER_AGENT,
+        },
+      }
+    );
+
+    const data = (await res.json().catch(() => null)) as any;
+
+    if (!res.ok || !data?.access_token) {
+      return {
+        success: false,
+        error: data?.message || `Refresh token gagal (HTTP ${res.status})`,
+      };
+    }
+
+    // Capture rotated refresh token if issued
+    let newRefreshToken: string | undefined;
+    const cookies = res.headers.getSetCookie?.() || [];
+    for (const cookieStr of cookies) {
+      const match = cookieStr.match(/monev_refresh_token=([^;]+)/);
+      if (match) {
+        newRefreshToken = match[1];
+        break;
+      }
+    }
+
+    return {
+      success: true,
+      access_token: data.access_token,
+      refresh_token: newRefreshToken || refreshToken,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: `Network error saat refresh token: ${err.message || String(err)}`,
     };
   }
 }

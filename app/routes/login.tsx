@@ -1,16 +1,17 @@
 import { Form, redirect, useActionData, useNavigation } from "react-router";
 import { createUserSession, getSession } from "~/lib/auth.server";
+import { authenticateKemnakerMonev } from "~/lib/kemnaker-auth.server";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "~/components/ui/card";
-import { Lock, ArrowRight, ShieldAlert, Sparkles } from "lucide-react";
+import { Lock, Mail, ArrowRight, ShieldAlert, CheckCircle2, ExternalLink } from "lucide-react";
 import { AppLogo } from "~/components/app-logo";
 import type { Route } from "./+types/login";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await getSession(request);
-  if (session.get("authenticated") === true) {
+  if (session.get("authenticated") === true && session.get("monev_access_token")) {
     return redirect("/dashboard");
   }
   return null;
@@ -18,23 +19,29 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
-  const password = formData.get("password")?.toString();
+  const email = formData.get("email")?.toString() || "";
+  const password = formData.get("password")?.toString() || "";
 
-  const configuredPassword = process.env.APP_PASSWORD;
-
-  if (!configuredPassword) {
+  if (!email || !password) {
     return {
-      error: "APP_PASSWORD belum diatur di .env!",
+      error: "Email dan password Kemnaker wajib diisi.",
     };
   }
 
-  if (password !== configuredPassword) {
+  const authResult = await authenticateKemnakerMonev({ email, password });
+
+  if (!authResult.success || !authResult.access_token) {
     return {
-      error: "Password salah. Akses ditolak.",
+      error: authResult.error || "Gagal masuk. Periksa email dan password akun Kemnaker Anda.",
     };
   }
 
-  return createUserSession(request);
+  return createUserSession(request, {
+    userId: authResult.user_id || "",
+    name: authResult.name || "Peserta Magang",
+    accessToken: authResult.access_token,
+    refreshToken: authResult.refresh_token,
+  });
 }
 
 export default function LoginPage() {
@@ -49,27 +56,48 @@ export default function LoginPage() {
         <div className="flex flex-col items-center space-y-1.5 text-center">
           <AppLogo size="lg" className="shadow-xs" />
           <h1 className="text-xl font-semibold tracking-tight">ngabsennn</h1>
-          <p className="text-xs text-muted-foreground">Daily Intern Report Generator</p>
+          <p className="text-xs text-muted-foreground">Daily Intern Report & MagangHub Monev Generator</p>
         </div>
 
         <Card className="border-border bg-card shadow-sm">
           <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-base font-medium">Autentikasi</CardTitle>
+            <CardTitle className="text-base font-medium">Masuk dengan Akun SIAPkerja</CardTitle>
             <CardDescription className="text-xs">
-              Masukkan password aplikasi untuk masuk ke workbench laporan.
+              Gunakan akun Kemnaker / MagangHub Anda untuk autentikasi otomatis presensi.
             </CardDescription>
           </CardHeader>
           <Form method="post">
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3.5">
               {actionData?.error && (
-                <div className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
-                  <ShieldAlert className="h-4 w-4 shrink-0" />
+                <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+                  <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>{actionData.error}</span>
                 </div>
               )}
-              <div className="space-y-2">
+
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="text-xs font-medium">
+                  Email Akun Kemnaker
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    placeholder="nama@email.com"
+                    required
+                    autoFocus
+                    className="h-9 text-xs pl-8"
+                  />
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5 text-muted-foreground">
+                    <Mail className="h-3.5 w-3.5 opacity-60" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
                 <Label htmlFor="password" className="text-xs font-medium">
-                  Password
+                  Password SIAPkerja
                 </Label>
                 <div className="relative">
                   <Input
@@ -78,32 +106,37 @@ export default function LoginPage() {
                     type="password"
                     placeholder="••••••••••••"
                     required
-                    autoFocus
-                    className="h-9 font-mono text-sm pr-9"
+                    className="h-9 font-mono text-xs pl-8"
                   />
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground">
-                    <Lock className="h-3.5 w-3.5 opacity-50" />
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5 text-muted-foreground">
+                    <Lock className="h-3.5 w-3.5 opacity-60" />
                   </div>
                 </div>
               </div>
             </CardContent>
+
             <CardFooter className="pt-2">
               <Button
                 type="submit"
                 size="default"
-                className="w-full justify-center gap-2 text-xs font-medium"
+                className="w-full justify-center gap-2 text-xs font-medium cursor-pointer"
                 disabled={isSubmitting}
               >
-                <span>{isSubmitting ? "Memverifikasi..." : "Masuk"}</span>
+                <span>{isSubmitting ? "Menghubungkan ke Kemnaker SSO..." : "Masuk ke Dashboard"}</span>
                 <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             </CardFooter>
           </Form>
         </Card>
 
-        <p className="text-center text-[11px] text-muted-foreground">
-          Konfigurasi password dapat diatur melalui file <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">.env</code>
-        </p>
+        <div className="space-y-1 text-center text-[11px] text-muted-foreground">
+          <p>
+            Kredensial langsung diverifikasi ke server resmi <span className="font-semibold text-foreground/80">account.kemnaker.go.id</span> via OAuth SSO.
+          </p>
+          <p className="text-[10px] opacity-75">
+            Password Anda tidak pernah disimpan di server atau database.
+          </p>
+        </div>
       </div>
     </div>
   );

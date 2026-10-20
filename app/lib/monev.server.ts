@@ -1,4 +1,4 @@
-import { authenticateKemnakerMonev } from "./kemnaker-auth.server";
+import { refreshMonevToken } from "./kemnaker-auth.server";
 
 export interface MonevSubmissionPayload {
   date: string;
@@ -26,35 +26,34 @@ export interface MonevSubmissionResult {
       state: string;
     };
   };
+  newAccessToken?: string;
+  newRefreshToken?: string;
   error?: string;
   code?: number;
 }
 
+const USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
 /**
  * Submit daily attendance and log directly to Monev MagangHub API.
- * Automatically logs in via Kemnaker SSO if no valid manual token provided.
+ * Uses active session access_token and transparently refreshes it via refresh_token if expired.
  */
 export async function submitToMonevMagangHub(params: {
   activity_log: string;
   lesson_learned: string;
   obstacles: string;
-  customToken?: string;
+  accessToken: string;
+  refreshToken?: string;
 }): Promise<MonevSubmissionResult> {
-  let token = params.customToken?.trim() || process.env.MONEV_ACCESS_TOKEN?.trim();
+  let token = params.accessToken.trim();
 
-  // If no manual token provided, perform automated SSO login via Kemnaker credentials
   if (!token) {
-    const authResult = await authenticateKemnakerMonev();
-    if (!authResult.success || !authResult.access_token) {
-      return {
-        success: false,
-        error:
-          authResult.error ||
-          "Gagal melakukan auto-login Kemnaker. Periksa KEMNAKER_EMAIL dan KEMNAKER_PASSWORD di .env",
-        code: 401,
-      };
-    }
-    token = authResult.access_token;
+    return {
+      success: false,
+      error: "Sesi login MagangHub tidak ditemukan. Silakan login kembali.",
+      code: 401,
+    };
   }
 
   // Calculate WIB Date (UTC+7)
@@ -80,10 +79,12 @@ export async function submitToMonevMagangHub(params: {
     longitude,
   };
 
-  try {
-    const cleanToken = token.startsWith("Bearer ") ? token.slice(7).trim() : token;
+  const doRequest = async (tokenToUse: string) => {
+    const cleanToken = tokenToUse.startsWith("Bearer ")
+      ? tokenToUse.slice(7).trim()
+      : tokenToUse;
 
-    const response = await fetch(
+    return fetch(
       "https://monev-api.maganghub.kemnaker.go.id/api/v1/attendances/with-daily-log",
       {
         method: "POST",
@@ -92,13 +93,30 @@ export async function submitToMonevMagangHub(params: {
           Accept: "application/json, text/plain, */*",
           Origin: "https://monev.maganghub.kemnaker.go.id",
           Referer: "https://monev.maganghub.kemnaker.go.id/",
-          "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+          "User-Agent": USER_AGENT,
           Authorization: `Bearer ${cleanToken}`,
         },
         body: JSON.stringify(payload),
       }
     );
+  };
+
+  try {
+    let response = await doRequest(token);
+    let newAccessToken: string | undefined;
+    let newRefreshToken: string | undefined;
+
+    // If token expired (401) and we have a 30-day refresh_token, transparently refresh and retry!
+    if (response.status === 401 && params.refreshToken) {
+      const refreshed = await refreshMonevToken(params.refreshToken);
+      if (refreshed.success && refreshed.access_token) {
+        token = refreshed.access_token;
+        newAccessToken = refreshed.access_token;
+        newRefreshToken = refreshed.refresh_token;
+        // Retry with refreshed access token
+        response = await doRequest(token);
+      }
+    }
 
     const data: any = await response.json().catch(() => null);
 
@@ -117,6 +135,8 @@ export async function submitToMonevMagangHub(params: {
     return {
       success: true,
       data: data?.data,
+      newAccessToken,
+      newRefreshToken,
     };
   } catch (err: any) {
     return {

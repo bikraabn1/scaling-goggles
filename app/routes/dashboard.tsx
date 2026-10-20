@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Form, useNavigation } from "react-router";
-import { requireUserSession } from "~/lib/auth.server";
+import { requireUserSession, sessionStorage } from "~/lib/auth.server";
 import { fetchTodayGitLabCommits } from "~/lib/gitlab.server";
 import { generateDailyReportFromCommits, type DailyReport } from "~/lib/llm.server";
 import { submitToMonevMagangHub, type MonevSubmissionResult } from "~/lib/monev.server";
@@ -8,11 +8,11 @@ import { CommitList } from "~/components/commit-list";
 import { ReportForm } from "~/components/report-form";
 import { Button } from "~/components/ui/button";
 import { AppLogo } from "~/components/app-logo";
-import { Sparkles, RefreshCw, LogOut, Calendar, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Sparkles, RefreshCw, LogOut, Calendar, AlertTriangle, CheckCircle2, User } from "lucide-react";
 import type { Route } from "./+types/dashboard";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  await requireUserSession(request);
+  const { user } = await requireUserSession(request);
 
   const gitlabData = await fetchTodayGitLabCommits();
 
@@ -26,22 +26,18 @@ export async function loader({ request }: Route.LoaderArgs) {
     timeZone: "Asia/Jakarta",
   }).format(now);
 
-  const hasEnvCredentials = Boolean(
-    process.env.KEMNAKER_EMAIL?.trim() && process.env.KEMNAKER_PASSWORD?.trim()
-  );
-
   return {
+    user,
     dateFormatted,
     commits: gitlabData.commits,
     recentCommits: gitlabData.recentCommits,
     filteredCount: gitlabData.filteredCount,
     gitlabError: gitlabData.error,
-    hasEnvCredentials,
   };
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  await requireUserSession(request);
+  const { session, user } = await requireUserSession(request);
 
   const formData = await request.formData();
   const intent = formData.get("intent");
@@ -54,7 +50,6 @@ export async function action({ request }: Route.ActionArgs) {
       return { error: `Gagal ambil commit: ${gitlabData.error}` };
     }
 
-    // Gunakan commit yang dipilih (hari ini atau 5 terakhir)
     const targetCommits =
       source === "recent" || (gitlabData.commits.length === 0 && gitlabData.recentCommits.length > 0)
         ? gitlabData.recentCommits
@@ -82,15 +77,31 @@ export async function action({ request }: Route.ActionArgs) {
     const obstacles = formData.get("obstacles")?.toString() || "";
     const customToken = formData.get("customToken")?.toString() || "";
 
+    const activeToken = customToken.trim() || user.monevAccessToken;
+    const refreshToken = user.monevRefreshToken;
+
     const submission = await submitToMonevMagangHub({
       activity_log,
       lesson_learned,
       obstacles,
-      customToken,
+      accessToken: activeToken,
+      refreshToken,
     });
 
+    // If token was refreshed during submission, persist new tokens into cookie session
+    let headers: HeadersInit | undefined;
+    if (submission.newAccessToken) {
+      session.set("monev_access_token", submission.newAccessToken);
+      if (submission.newRefreshToken) {
+        session.set("monev_refresh_token", submission.newRefreshToken);
+      }
+      headers = {
+        "Set-Cookie": await sessionStorage.commitSession(session),
+      };
+    }
+
     if (!submission.success) {
-      return {
+      const responseData = {
         monevError: submission.error || "Gagal mengirimkan laporan ke Monev MagangHub.",
         report: {
           uraian_kegiatan: activity_log,
@@ -98,9 +109,10 @@ export async function action({ request }: Route.ActionArgs) {
           kendala: obstacles,
         },
       };
+      return headers ? new Response(JSON.stringify(responseData), { headers }) : responseData;
     }
 
-    return {
+    const responseData = {
       monevSuccess: true,
       monevData: submission.data,
       report: {
@@ -109,6 +121,8 @@ export async function action({ request }: Route.ActionArgs) {
         kendala: obstacles,
       },
     };
+
+    return headers ? new Response(JSON.stringify(responseData), { headers }) : responseData;
   }
 
   return null;
@@ -136,13 +150,23 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-semibold tracking-tight">ngabsennn</h1>
               <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                v1.1 • Monev Auto-Sync
+                v1.2 • SIAPkerja Connected
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+          <div className="flex items-center gap-3">
+            {/* User Profile Badge */}
+            <div className="hidden sm:flex items-center gap-2 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-xs">
+              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <User className="h-3 w-3" />
+              </div>
+              <span className="font-medium text-foreground max-w-[150px] truncate">
+                {loaderData.user.name}
+              </span>
+            </div>
+
+            <div className="hidden md:flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
               <Calendar className="h-3.5 w-3.5 text-blue-500" />
               <span>{loaderData.dateFormatted}</span>
             </div>
@@ -150,7 +174,7 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
             <Form method="post" action="/logout">
               <Button variant="ghost" size="sm" type="submit" className="h-8 text-xs text-muted-foreground hover:text-foreground cursor-pointer">
                 <LogOut className="h-3.5 w-3.5 mr-1" />
-                <span>Keluar</span>
+                <span className="hidden sm:inline">Keluar</span>
               </Button>
             </Form>
           </div>
@@ -190,7 +214,7 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
                 Presensi & Log Harian Berhasil Disubmit ke MagangHub!
               </p>
               <p className="text-xs text-emerald-700/80 dark:text-emerald-400/80">
-                Status: <span className="font-bold">{actionData.monevData?.status}</span> • Approval: <span className="font-bold">{actionData.monevData?.approval_status}</span> (ID Presensi: {actionData.monevData?.id})
+                Peserta: <span className="font-bold">{loaderData.user.name}</span> • Status: <span className="font-bold">{actionData.monevData?.status}</span> • Approval: <span className="font-bold">{actionData.monevData?.approval_status}</span> (ID Presensi: {actionData.monevData?.id})
               </p>
             </div>
           </div>
@@ -259,7 +283,7 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
           <ReportForm
             key={report ? JSON.stringify(report) : "empty"}
             initialReport={report}
-            hasEnvCredentials={loaderData.hasEnvCredentials}
+            hasEnvCredentials={true}
             isSubmittingMonev={isSubmittingMonev}
           />
         </div>
