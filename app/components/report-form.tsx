@@ -9,20 +9,20 @@ import type { DailyReport } from "~/lib/llm.server";
 
 interface ReportFormProps {
   initialReport?: DailyReport;
-  hasEnvToken?: boolean;
+  hasEnvCredentials?: boolean;
   isSubmittingMonev?: boolean;
 }
 
 export function ReportForm({
   initialReport,
-  hasEnvToken = false,
+  hasEnvCredentials = false,
   isSubmittingMonev = false,
 }: ReportFormProps) {
   const [kegiatan, setKegiatan] = useState(initialReport?.uraian_kegiatan || "");
   const [pembelajaran, setPembelajaran] = useState(initialReport?.pembelajaran || "");
   const [kendala, setKendala] = useState(initialReport?.kendala || "");
   const [customToken, setCustomToken] = useState("");
-  const [showTokenInput, setShowTokenInput] = useState(!hasEnvToken);
+  const [showTokenInput, setShowTokenInput] = useState(false);
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -135,20 +135,20 @@ export function ReportForm({
           <div className="flex items-center justify-between">
             <span className="font-semibold text-foreground flex items-center gap-1.5">
               <Key className="h-3.5 w-3.5 text-amber-500" />
-              Bearer Token Monev MagangHub
+              Override Bearer Token (Opsional)
             </span>
-            {hasEnvToken && (
+            {hasEnvCredentials && (
               <Badge variant="secondary" className="text-[10px] bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                .env terpasang
+                Auto-Login SSO Aktif (.env)
               </Badge>
             )}
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Token diambil dari header <code>Authorization: Bearer ...</code> di web MagangHub. Berlaku 6 jam.
+            Secara default aplikasi login otomatis via Kemnaker SSO. Isi kolom ini hanya jika ingin override manual dengan token tertentu.
           </p>
           <Input
             type="password"
-            placeholder={hasEnvToken ? "Menggunakan token default dari .env (atau paste token baru di sini)" : "Paste Bearer token (eyJ...)"}
+            placeholder="Paste Bearer token manual jika diperlukan (eyJ...)"
             value={customToken}
             onChange={(e) => setCustomToken(e.target.value)}
             className="h-8 text-xs font-mono bg-background"

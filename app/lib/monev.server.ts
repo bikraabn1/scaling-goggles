@@ -1,3 +1,5 @@
+import { authenticateKemnakerMonev } from "./kemnaker-auth.server";
+
 export interface MonevSubmissionPayload {
   date: string;
   status: "PRESENT";
@@ -29,7 +31,8 @@ export interface MonevSubmissionResult {
 }
 
 /**
- * Submit daily attendance and log directly to Monev MagangHub API
+ * Submit daily attendance and log directly to Monev MagangHub API.
+ * Automatically logs in via Kemnaker SSO if no valid manual token provided.
  */
 export async function submitToMonevMagangHub(params: {
   activity_log: string;
@@ -37,14 +40,21 @@ export async function submitToMonevMagangHub(params: {
   obstacles: string;
   customToken?: string;
 }): Promise<MonevSubmissionResult> {
-  const token = params.customToken?.trim() || process.env.MONEV_ACCESS_TOKEN?.trim();
+  let token = params.customToken?.trim() || process.env.MONEV_ACCESS_TOKEN?.trim();
 
+  // If no manual token provided, perform automated SSO login via Kemnaker credentials
   if (!token) {
-    return {
-      success: false,
-      error: "MONEV_ACCESS_TOKEN belum diisi di .env atau form. Silakan masukkan token aktif.",
-      code: 401,
-    };
+    const authResult = await authenticateKemnakerMonev();
+    if (!authResult.success || !authResult.access_token) {
+      return {
+        success: false,
+        error:
+          authResult.error ||
+          "Gagal melakukan auto-login Kemnaker. Periksa KEMNAKER_EMAIL dan KEMNAKER_PASSWORD di .env",
+        code: 401,
+      };
+    }
+    token = authResult.access_token;
   }
 
   // Calculate WIB Date (UTC+7)
@@ -80,8 +90,8 @@ export async function submitToMonevMagangHub(params: {
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json, text/plain, */*",
-          Origin: "https://maganghub.kemnaker.go.id",
-          Referer: "https://maganghub.kemnaker.go.id/",
+          Origin: "https://monev.maganghub.kemnaker.go.id",
+          Referer: "https://monev.maganghub.kemnaker.go.id/",
           "User-Agent":
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
           Authorization: `Bearer ${cleanToken}`,

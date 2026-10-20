@@ -26,7 +26,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     timeZone: "Asia/Jakarta",
   }).format(now);
 
-  const hasEnvToken = Boolean(process.env.MONEV_ACCESS_TOKEN?.trim());
+  const hasEnvCredentials = Boolean(
+    process.env.KEMNAKER_EMAIL?.trim() && process.env.KEMNAKER_PASSWORD?.trim()
+  );
 
   return {
     dateFormatted,
@@ -34,7 +36,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     recentCommits: gitlabData.recentCommits,
     filteredCount: gitlabData.filteredCount,
     gitlabError: gitlabData.error,
-    hasEnvToken,
+    hasEnvCredentials,
   };
 }
 
@@ -257,7 +259,7 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
           <ReportForm
             key={report ? JSON.stringify(report) : "empty"}
             initialReport={report}
-            hasEnvToken={loaderData.hasEnvToken}
+            hasEnvCredentials={loaderData.hasEnvCredentials}
             isSubmittingMonev={isSubmittingMonev}
           />
         </div>
