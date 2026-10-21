@@ -138,7 +138,8 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
     loaderData.commits.length > 0 ? "today" : "recent"
   );
 
-  const report: DailyReport | undefined = actionData?.report;
+  const data = actionData as any;
+  const report: DailyReport | undefined = data?.report;
   const activeCount = selectedSource === "today" ? loaderData.commits.length : loaderData.recentCommits.length;
 
   return (
@@ -196,36 +197,36 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
         )}
 
         {/* Action Error if any */}
-        {actionData?.error && (
+        {data?.error && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle className="text-xs font-semibold">Gagal Generate Laporan</AlertTitle>
             <AlertDescription className="text-xs">
-              {actionData.error}
+              {data.error}
             </AlertDescription>
           </Alert>
         )}
 
         {/* Monev Submission Success Banner */}
-        {actionData?.monevSuccess && (
+        {data?.monevSuccess && (
           <Alert className="border-emerald-500/40 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 shadow-xs">
             <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             <AlertTitle className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
               Presensi & Log Harian Berhasil Disubmit ke MagangHub!
             </AlertTitle>
             <AlertDescription className="text-xs text-emerald-700/90 dark:text-emerald-400/90">
-              Peserta: <span className="font-bold text-foreground">{loaderData.user.name}</span> • Status: <span className="font-bold text-foreground">{actionData.monevData?.status}</span> • Approval: <span className="font-bold text-foreground">{actionData.monevData?.approval_status}</span> (ID Presensi: {actionData.monevData?.id})
+              Peserta: <span className="font-bold text-foreground">{loaderData.user.name}</span> • Status: <span className="font-bold text-foreground">{data.monevData?.status}</span> • Approval: <span className="font-bold text-foreground">{data.monevData?.approval_status}</span> (ID Presensi: {data.monevData?.id})
             </AlertDescription>
           </Alert>
         )}
 
         {/* Monev Submission Error Banner */}
-        {actionData?.monevError && (
+        {data?.monevError && (
           <Alert variant="destructive" className="shadow-xs">
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle className="text-xs font-semibold">Gagal Mengirim ke Monev MagangHub</AlertTitle>
             <AlertDescription className="text-xs">
-              {actionData.monevError}
+              {data.monevError}
             </AlertDescription>
           </Alert>
         )}

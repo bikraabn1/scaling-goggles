@@ -52,12 +52,14 @@ export async function authenticateKemnakerMonev(credentials: {
     const csrfMatch = html1.match(
       /<meta[^>]*name=["']csrf-token["'][^>]*content=["']([^"']+)["']/i
     );
-    const csrfToken = csrfMatch ? csrfMatch[1] : "";
+    const csrfToken =
+      process.env.MONEV_CSRF_TOKEN?.trim() ||
+      (csrfMatch ? csrfMatch[1] : "");
 
     if (!csrfToken) {
       return {
         success: false,
-        error: "Gagal menemukan CSRF token dari halaman login Kemnaker.",
+        error: "Gagal menemukan CSRF token dari halaman login Kemnaker. Silakan set MONEV_CSRF_TOKEN di .env.",
       };
     }
 
