@@ -145,6 +145,26 @@ export async function action({ request }: Route.ActionArgs) {
     const defaultNonCodingActivity = formData.get("defaultNonCodingActivity")?.toString().trim() || null;
 
     try {
+      // Pastikan user ada di tabel ngabsennn.users agar tidak melanggar foreign key constraint
+      await db
+        .insert(users)
+        .values({
+          id: user.userId,
+          email: notifyEmail || "user@kemnaker.go.id",
+          name: user.name || "Peserta Magang",
+          monevAccessToken: user.monevAccessToken || null,
+          monevRefreshToken: user.monevRefreshToken || null,
+        })
+        .onConflictDoUpdate({
+          target: users.id,
+          set: {
+            name: user.name || "Peserta Magang",
+            ...(user.monevAccessToken ? { monevAccessToken: user.monevAccessToken } : {}),
+            ...(user.monevRefreshToken ? { monevRefreshToken: user.monevRefreshToken } : {}),
+            updatedAt: new Date(),
+          },
+        });
+
       const updateSet: Record<string, any> = {
         gitlabBaseUrl,
         gitlabProjectId,
