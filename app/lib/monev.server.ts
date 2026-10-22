@@ -45,6 +45,8 @@ export async function submitToMonevMagangHub(params: {
   obstacles: string;
   accessToken: string;
   refreshToken?: string;
+  latitude?: number | null;
+  longitude?: number | null;
 }): Promise<MonevSubmissionResult> {
   let token = params.accessToken.trim();
 
@@ -66,8 +68,14 @@ export async function submitToMonevMagangHub(params: {
   const dateStr = `${year}-${month}-${day}`;
 
   // Office coordinates (fallback to defaults if not set)
-  const latitude = parseFloat(process.env.MONEV_LATITUDE || "-7.565374884700425");
-  const longitude = parseFloat(process.env.MONEV_LONGITUDE || "110.81394969592333");
+  const latitude =
+    params.latitude !== undefined && params.latitude !== null
+      ? params.latitude
+      : parseFloat(process.env.MONEV_LATITUDE || "-7.565374884700425");
+  const longitude =
+    params.longitude !== undefined && params.longitude !== null
+      ? params.longitude
+      : parseFloat(process.env.MONEV_LONGITUDE || "110.81394969592333");
 
   const payload: MonevSubmissionPayload = {
     date: dateStr,

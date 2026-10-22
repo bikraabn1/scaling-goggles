@@ -5,13 +5,15 @@ import { fetchTodayGitLabCommits } from "~/lib/gitlab.server";
 import { generateDailyReportFromCommits, type DailyReport } from "~/lib/llm.server";
 import { submitToMonevMagangHub, type MonevSubmissionResult } from "~/lib/monev.server";
 import { db } from "~/db/index.server";
-import { attendanceLogs, users, type AttendanceLog } from "~/db/schema";
+import { attendanceLogs, users, userConfigs, type AttendanceLog, type UserConfig } from "~/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { CommitList } from "~/components/commit-list";
 import { ReportForm } from "~/components/report-form";
 import { Button } from "~/components/ui/button";
 import { AppLogo } from "~/components/app-logo";
 import { ThemeToggle } from "~/components/theme-toggle";
+import { UserSettingsDialog } from "~/components/user-settings-dialog";
+import { AttendanceHistoryDialog } from "~/components/attendance-history-dialog";
 import { Sparkles, RefreshCw, LogOut, Calendar, AlertTriangle, CheckCircle2, User } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import type { Route } from "./+types/dashboard";
@@ -19,7 +21,27 @@ import type { Route } from "./+types/dashboard";
 export async function loader({ request }: Route.LoaderArgs) {
   const { user } = await requireUserSession(request);
 
-  const gitlabData = await fetchTodayGitLabCommits();
+  // Read custom user configs from Supabase if exists
+  let userConfig: UserConfig | null = null;
+  try {
+    const configs = await db
+      .select()
+      .from(userConfigs)
+      .where(eq(userConfigs.userId, user.userId))
+      .limit(1);
+    if (configs.length > 0) {
+      userConfig = configs[0];
+    }
+  } catch (err) {
+    console.error("Gagal membaca userConfig dari Supabase:", err);
+  }
+
+  const gitlabData = await fetchTodayGitLabCommits({
+    baseUrl: userConfig?.gitlabBaseUrl,
+    projectId: userConfig?.gitlabProjectId,
+    token: userConfig?.gitlabToken,
+    authorName: userConfig?.gitlabAuthorName,
+  });
 
   // Tanggal hari ini dalam format Bahasa Indonesia & WIB date string
   const now = new Date();
@@ -57,13 +79,23 @@ export async function loader({ request }: Route.LoaderArgs) {
       .from(attendanceLogs)
       .where(eq(attendanceLogs.userId, user.userId))
       .orderBy(desc(attendanceLogs.submittedAt))
-      .limit(5);
+      .limit(10);
   } catch (dbErr) {
     console.error("Gagal membaca riwayat presensi dari Supabase:", dbErr);
   }
 
+  const defaultConfig = {
+    gitlabBaseUrl: process.env.GITLAB_BASE_URL,
+    gitlabProjectId: process.env.GITLAB_PROJECT_ID,
+    gitlabAuthorName: process.env.GITLAB_AUTHOR_NAME,
+    officeLatitude: process.env.MONEV_LATITUDE,
+    officeLongitude: process.env.MONEV_LONGITUDE,
+  };
+
   return {
     user,
+    userConfig,
+    defaultConfig,
     dateFormatted,
     todayDateStr,
     todayAttendance,
@@ -82,8 +114,67 @@ export async function action({ request }: Route.ActionArgs) {
   const intent = formData.get("intent");
   const source = formData.get("source")?.toString();
 
+  // Helper to get user's custom config
+  const getUserConfig = async () => {
+    try {
+      const configs = await db
+        .select()
+        .from(userConfigs)
+        .where(eq(userConfigs.userId, user.userId))
+        .limit(1);
+      return configs[0] || null;
+    } catch {
+      return null;
+    }
+  };
+
+  if (intent === "save_config") {
+    const gitlabBaseUrl = formData.get("gitlabBaseUrl")?.toString().trim() || null;
+    const gitlabProjectId = formData.get("gitlabProjectId")?.toString().trim() || null;
+    const gitlabAuthorName = formData.get("gitlabAuthorName")?.toString().trim() || null;
+    const gitlabToken = formData.get("gitlabToken")?.toString().trim() || null;
+    const officeLatitude = parseFloat(formData.get("officeLatitude")?.toString() || "");
+    const officeLongitude = parseFloat(formData.get("officeLongitude")?.toString() || "");
+
+    try {
+      await db
+        .insert(userConfigs)
+        .values({
+          userId: user.userId,
+          gitlabBaseUrl,
+          gitlabProjectId,
+          gitlabToken: gitlabToken || undefined,
+          gitlabAuthorName,
+          officeLatitude: !isNaN(officeLatitude) ? officeLatitude : null,
+          officeLongitude: !isNaN(officeLongitude) ? officeLongitude : null,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: userConfigs.userId,
+          set: {
+            gitlabBaseUrl,
+            gitlabProjectId,
+            ...(gitlabToken ? { gitlabToken } : {}),
+            gitlabAuthorName,
+            officeLatitude: !isNaN(officeLatitude) ? officeLatitude : null,
+            officeLongitude: !isNaN(officeLongitude) ? officeLongitude : null,
+            updatedAt: new Date(),
+          },
+        });
+      return { configSuccess: "Pengaturan berhasil diperbarui." };
+    } catch (err: any) {
+      return { configError: `Gagal menyimpan pengaturan: ${err.message}` };
+    }
+  }
+
   if (intent === "generate") {
-    const gitlabData = await fetchTodayGitLabCommits();
+    const userConfig = await getUserConfig();
+    const gitlabData = await fetchTodayGitLabCommits({
+      baseUrl: userConfig?.gitlabBaseUrl,
+      projectId: userConfig?.gitlabProjectId,
+      token: userConfig?.gitlabToken,
+      authorName: userConfig?.gitlabAuthorName,
+    });
 
     if (gitlabData.error) {
       return { error: `Gagal ambil commit: ${gitlabData.error}` };
@@ -119,12 +210,16 @@ export async function action({ request }: Route.ActionArgs) {
     const activeToken = customToken.trim() || user.monevAccessToken;
     const refreshToken = user.monevRefreshToken;
 
+    const userConfig = await getUserConfig();
+
     const submission = await submitToMonevMagangHub({
       activity_log,
       lesson_learned,
       obstacles,
       accessToken: activeToken,
       refreshToken,
+      latitude: userConfig?.officeLatitude,
+      longitude: userConfig?.officeLongitude,
     });
 
     // If token was refreshed during submission, persist new tokens into cookie session & Supabase
@@ -245,6 +340,8 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
               <span>{loaderData.dateFormatted}</span>
             </div>
 
+            <AttendanceHistoryDialog attendances={loaderData.recentAttendances} />
+            <UserSettingsDialog config={loaderData.userConfig} defaultConfig={loaderData.defaultConfig} />
             <ThemeToggle />
 
             <Form method="post" action="/logout">
@@ -259,6 +356,23 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
 
       {/* Main Workbench */}
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
+        {/* Config Update Notification */}
+        {data?.configSuccess && (
+          <Alert className="border-emerald-500/40 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 shadow-xs">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <AlertTitle className="text-xs font-semibold">Pengaturan Disimpan</AlertTitle>
+            <AlertDescription className="text-xs">{data.configSuccess}</AlertDescription>
+          </Alert>
+        )}
+
+        {data?.configError && (
+          <Alert variant="destructive" className="shadow-xs">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle className="text-xs font-semibold">Gagal Menyimpan Pengaturan</AlertTitle>
+            <AlertDescription className="text-xs">{data.configError}</AlertDescription>
+          </Alert>
+        )}
+
         {/* Warning if GitLab API Error */}
         {loaderData.gitlabError && (
           <Alert className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300">

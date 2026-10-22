@@ -18,16 +18,21 @@ const gitlabAgent = new Agent({
   },
 });
 
-export async function fetchTodayGitLabCommits(): Promise<{
+export async function fetchTodayGitLabCommits(configOverride?: {
+  baseUrl?: string | null;
+  projectId?: string | null;
+  token?: string | null;
+  authorName?: string | null;
+}): Promise<{
   commits: GitLabCommit[];
   recentCommits: GitLabCommit[];
   filteredCount: number;
   error?: string;
 }> {
-  const baseUrl = process.env.GITLAB_BASE_URL?.replace(/\/$/, "");
-  const projectId = process.env.GITLAB_PROJECT_ID;
-  const token = process.env.GITLAB_TOKEN;
-  const authorName = process.env.GITLAB_AUTHOR_NAME?.trim();
+  const baseUrl = (configOverride?.baseUrl?.trim() || process.env.GITLAB_BASE_URL)?.replace(/\/$/, "");
+  const projectId = configOverride?.projectId?.trim() || process.env.GITLAB_PROJECT_ID;
+  const token = configOverride?.token?.trim() || process.env.GITLAB_TOKEN;
+  const authorName = configOverride?.authorName !== undefined ? configOverride.authorName?.trim() : process.env.GITLAB_AUTHOR_NAME?.trim();
 
   if (!baseUrl || !projectId || !token) {
     return {
