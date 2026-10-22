@@ -203,7 +203,7 @@ export function CommitList({
 
       {/* Commit Table / Responsive Feed */}
       {activeList.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border p-8 text-center bg-muted/10">
+        <div className="rounded-lg border border-dashed border-border p-8 text-center bg-muted/10">
           <GitCommit className="mx-auto h-8 w-8 text-muted-foreground/50 mb-2" />
           <p className="text-xs font-medium text-foreground">
             Tidak ada commit yang ditemukan.
@@ -214,15 +214,7 @@ export function CommitList({
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border border-border bg-card">
-          {/* Table Header (Desktop only) */}
-          <div className="hidden sm:grid sm:grid-cols-[100px_1fr_170px] items-center border-b border-border bg-muted/50 px-4 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-            <span>Tipe</span>
-            <span>Uraian Commit Message</span>
-            <span className="text-right">Hash / Waktu</span>
-          </div>
-
-          {/* Table Rows / Mobile Cards */}
-          <div className="divide-y divide-border/60">
+          <div className="divide-y divide-border/60 max-h-[500px] overflow-y-auto">
             {activeList.map((commit, idx) => {
               const parsed = parseCommit(commit.title);
               const style = TYPE_STYLES[parsed.type] || DEFAULT_STYLE;
@@ -230,48 +222,34 @@ export function CommitList({
               return (
                 <div
                   key={commit.id || idx}
-                  className="flex flex-col sm:grid sm:grid-cols-[100px_1fr_170px] sm:items-start gap-2.5 sm:gap-3 p-3 sm:px-4 sm:py-3 hover:bg-muted/30 transition-colors"
+                  className="flex flex-col gap-2 p-3 hover:bg-muted/30 transition-colors"
                 >
-                  {/* Col 1: Type & Scope */}
-                  <div className="flex items-center sm:flex-col sm:items-start gap-1.5 shrink-0">
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold border ${style.bg} ${style.text} ${style.border}`}
-                    >
-                      <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
-                      {parsed.type}
-                    </span>
-                    {parsed.scope && (
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground border border-border/70 max-w-[120px] truncate">
-                        {parsed.scope}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-semibold border ${style.bg} ${style.text} ${style.border}`}
+                      >
+                        <span className={`h-1 w-1 rounded-full ${style.dot}`} />
+                        {parsed.type}
                       </span>
-                    )}
-                  </div>
-
-                  {/* Col 2: Message & Detail */}
-                  <div className="min-w-0 space-y-1">
-                    <p className="text-xs font-medium text-foreground leading-relaxed break-words">
-                      {parsed.message}
-                    </p>
-                    {commit.message && commit.message.trim() !== commit.title.trim() && (
-                      <p className="text-[11px] text-muted-foreground leading-normal whitespace-pre-wrap rounded bg-muted/40 p-2 border border-border/40 font-mono">
-                        {commit.message.trim()}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Col 3: Metadata (Hash & Time) */}
-                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-1 shrink-0 pt-1 sm:pt-0 border-t sm:border-0 border-border/40 text-[11px] font-mono text-muted-foreground">
-                    <div className="flex items-center gap-1.5">
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground/80 border border-border/60">
-                        {commit.short_id}
-                      </span>
-                      <span className="text-xs font-sans text-muted-foreground/80 sm:hidden">
-                        • {commit.author_name}
-                      </span>
+                      {parsed.scope && (
+                        <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground border border-border/70 max-w-[120px] truncate">
+                          {parsed.scope}
+                        </span>
+                      )}
                     </div>
-                    <span className="text-[10px] text-muted-foreground">
-                      {formatCommitDate(commit.authored_date)}
+                    <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground border border-border/60">
+                      {commit.short_id}
                     </span>
+                  </div>
+
+                  <p className="text-xs font-medium text-foreground leading-relaxed break-words">
+                    {parsed.message}
+                  </p>
+
+                  <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground pt-0.5">
+                    <span className="truncate max-w-[150px]">{commit.author_name}</span>
+                    <span>{formatCommitDate(commit.authored_date)}</span>
                   </div>
                 </div>
               );

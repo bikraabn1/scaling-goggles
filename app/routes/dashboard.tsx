@@ -8,6 +8,7 @@ import { CommitList } from "~/components/commit-list";
 import { ReportForm } from "~/components/report-form";
 import { Button } from "~/components/ui/button";
 import { AppLogo } from "~/components/app-logo";
+import { ThemeToggle } from "~/components/theme-toggle";
 import { Sparkles, RefreshCw, LogOut, Calendar, AlertTriangle, CheckCircle2, User } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import type { Route } from "./+types/dashboard";
@@ -146,21 +147,21 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
     <div className="min-h-screen bg-background text-foreground">
       {/* Top Navigation */}
       <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-xs">
-        <div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-4 sm:px-6">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2.5">
             <AppLogo size="sm" />
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-semibold tracking-tight">ngabsennn</h1>
-              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary border border-primary/20">
                 v1.2 • SIAPkerja Connected
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             {/* User Profile Badge */}
-            <div className="hidden sm:flex items-center gap-2 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-xs">
-              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <div className="hidden sm:flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 py-1 text-xs">
+              <div className="flex h-5 w-5 items-center justify-center rounded-sm bg-primary/10 text-primary">
                 <User className="h-3 w-3" />
               </div>
               <span className="font-medium text-foreground max-w-[150px] truncate">
@@ -169,9 +170,11 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
             </div>
 
             <div className="hidden md:flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-              <Calendar className="h-3.5 w-3.5 text-blue-500" />
+              <Calendar className="h-3.5 w-3.5 text-primary" />
               <span>{loaderData.dateFormatted}</span>
             </div>
+
+            <ThemeToggle />
 
             <Form method="post" action="/logout">
               <Button variant="ghost" size="sm" type="submit" className="h-8 text-xs text-muted-foreground hover:text-foreground cursor-pointer">
@@ -184,7 +187,7 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
       </header>
 
       {/* Main Workbench */}
-      <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 space-y-6">
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
         {/* Warning if GitLab API Error */}
         {loaderData.gitlabError && (
           <Alert className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300">
@@ -231,61 +234,73 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
           </Alert>
         )}
 
-        {/* Section 1: GitLab Commits Harvester */}
-        <div className="space-y-3">
-          <CommitList
-            commits={loaderData.commits}
-            recentCommits={loaderData.recentCommits}
-            filteredCount={loaderData.filteredCount}
-            selectedSource={selectedSource}
-            onSelectSource={setSelectedSource}
-          />
+        {/* 2-Column Responsive Workbench Grid */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">
+          {/* Left Column: GitLab Commits Harvester (col-span-5) */}
+          <div className="space-y-4 lg:col-span-5 lg:sticky lg:top-20">
+            {/* Quick Action Generate Card (Atas Commit History) */}
+            <div className="rounded-lg border border-border bg-card p-4 shadow-xs space-y-3">
+              <div className="space-y-1">
+                <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground font-mono">
+                  Rangkum dengan AI
+                </h3>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  {selectedSource === "today"
+                    ? loaderData.commits.length > 0
+                      ? "Rangkum commit hari ini menjadi 3 poin laporan formal (150–200 karakter)."
+                      : "Belum ada commit hari ini. Beralih ke tab '5 Terakhir' untuk generate draf."
+                    : "Rangkum 5 commit terakhir repository menjadi draf laporan harian."}
+                </p>
+              </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-            <p className="text-[11px] text-muted-foreground">
-              {selectedSource === "today"
-                ? loaderData.commits.length > 0
-                  ? "Siap merangkum commit hari ini menjadi laporan formal via LLM."
-                  : "Belum ada commit hari ini. Beralih ke tab '5 Terakhir' untuk generate draf."
-                : "Akan merangkum 5 commit terakhir repository menjadi draf laporan harian."}
-            </p>
-            <Form method="post">
-              <input type="hidden" name="intent" value="generate" />
-              <input type="hidden" name="source" value={selectedSource} />
-              <Button
-                type="submit"
-                size="default"
-                disabled={isGenerating || activeCount === 0}
-                className="gap-2 text-xs font-semibold cursor-pointer shadow-sm bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white border-0 transition-all self-end sm:self-auto"
-              >
-                {isGenerating ? (
-                  <>
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                    <span>Mengenerate Draf Laporan...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-3.5 w-3.5" />
-                    <span>
-                      {selectedSource === "today"
-                        ? "Generate dari Commit Hari Ini"
-                        : "Generate dari 5 Commit Terakhir"}
-                    </span>
-                  </>
-                )}
-              </Button>
-            </Form>
+              <Form method="post">
+                <input type="hidden" name="intent" value="generate" />
+                <input type="hidden" name="source" value={selectedSource} />
+                <Button
+                  type="submit"
+                  size="default"
+                  disabled={isGenerating || activeCount === 0}
+                  className="w-full gap-2 text-xs font-semibold cursor-pointer shadow-xs bg-primary text-primary-foreground hover:bg-primary/90 border-0 transition-all"
+                >
+                  {isGenerating ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Mengenerate Draf Laporan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5" />
+                      <span>
+                        {selectedSource === "today"
+                          ? "Generate dari Commit Hari Ini"
+                          : "Generate dari 5 Commit Terakhir"}
+                      </span>
+                    </>
+                  )}
+                </Button>
+              </Form>
+            </div>
+
+            <CommitList
+              commits={loaderData.commits}
+              recentCommits={loaderData.recentCommits}
+              filteredCount={loaderData.filteredCount}
+              selectedSource={selectedSource}
+              onSelectSource={setSelectedSource}
+            />
           </div>
-        </div>
 
-        {/* Section 2: Report Form Workspace */}
-        <div className="rounded-xl border border-border bg-card p-5 sm:p-6 shadow-xs">
-          <ReportForm
-            key={report ? JSON.stringify(report) : "empty"}
-            initialReport={report}
-            hasEnvCredentials={true}
-            isSubmittingMonev={isSubmittingMonev}
-          />
+          {/* Right Column: Report Form Workspace (col-span-7) */}
+          <div className="space-y-4 lg:col-span-7">
+            <div className="rounded-lg border border-border bg-card p-5 sm:p-6 shadow-xs">
+              <ReportForm
+                key={report ? JSON.stringify(report) : "empty"}
+                initialReport={report}
+                hasEnvCredentials={true}
+                isSubmittingMonev={isSubmittingMonev}
+              />
+            </div>
+          </div>
         </div>
       </main>
     </div>

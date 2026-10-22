@@ -25,10 +25,11 @@ Platform ini menyelesaikan kendala repetitive manual kerja harian peserta magang
 
 #### 3.1. Official Kemnaker SIAPkerja SSO Handshake
 - **Handshake Flow**:
-  1. `GET https://account.kemnaker.go.id/auth` untuk mengambil session cookie & CSRF token.
-  2. `POST https://account.kemnaker.go.id/auth/login` memvalidasi username/email & password.
-  3. Mengambil OAuth `code` dan `state` via redirect authorize.
-  4. Callback exchange ke `https://monev-api.maganghub.kemnaker.go.id/api/v1/auth/login/callback` dengan cookie `monev_oauth_state`.
+  1. `GET https://account.kemnaker.go.id/auth` (manual redirect tracking) untuk mengoleksi initial OAuth session cookies (`acw_tc`, `kemnaker_ri_session`).
+  2. `GET /auth/login` membawa cookies sesi untuk auto-scrape CSRF token segar dari tag `<meta name="csrf-token">` tanpa input manual.
+  3. `POST https://account.kemnaker.go.id/auth/login` memvalidasi kredensial pengguna dengan dynamic CSRF token.
+  4. Mengambil OAuth `code` dan `state` via authorize redirect.
+  5. Callback exchange ke `https://monev-api.maganghub.kemnaker.go.id/api/v1/auth/login/callback` dengan cookie `monev_oauth_state`.
 - **Token Management**:
   - `access_token` (JWT, berlaku 6 jam).
   - `monev_refresh_token` (berlaku 30 hari).
@@ -58,6 +59,20 @@ Platform ini menyelesaikan kendala repetitive manual kerja harian peserta magang
 - Payload otomatis: `date` (WIB), `status: PRESENT`, koordinat kantor GPS (`latitude`, `longitude`), serta 3 poin laporan.
 - **Shadcn Confirmation Dialog**: Konfirmasi popup pra-kirim dengan preview teks dan jumlah huruf untuk mencegah salah submit.
 - **Shadcn Alerts**: Notifikasi feedback visual (sukses, error API, atau error autentikasi).
+
+#### 3.5. Responsive 2-Column Workbench & Design System
+- **Preset `b5dyaqxe6` + Style `Sera`**:
+  - Filosofi editorial/print-design dengan tipografi kuat, sudut tegas tajam (`--radius: 0.25rem`), aksen mist neutral dan teal brand accents.
+  - Tracking uppercase monospace pada subheadings dan badge status.
+- **Dark / Light Theme Toggle**:
+  - Tombol toggle berbasis icon `Contrast` (Lucide React) dengan micro-interaction rotasi halus.
+  - Script inline anti-FOUC di `<head>` untuk transisi instan tanpa kedipan putih.
+- **Eliminasi Blank Space**:
+  - Layout diperluas menjadi `max-w-7xl` (1280px).
+  - Pada desktop (`lg`+), antarmuka terbagi menjadi 2 kolom proporsional (5:7):
+    - Kolom Kiri: Feed commit GitLab (scrollable compact) + Tombol generate AI sticky.
+    - Kolom Kanan: Workspace form laporan 3 poin dan aksi submit Monev.
+  - Pada mobile/tablet, kembali tersusun vertikal adaptif 1 kolom yang fleksibel.
 
 ---
 

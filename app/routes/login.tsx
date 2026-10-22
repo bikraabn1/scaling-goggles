@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Lock, Mail, ArrowRight, ShieldAlert, CheckCircle2, ExternalLink } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { AppLogo } from "~/components/app-logo";
+import { ThemeToggle } from "~/components/theme-toggle";
 import type { Route } from "./+types/login";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -51,7 +52,10 @@ export default function LoginPage() {
   const isSubmitting = navigation.state === "submitting";
 
   return (
-    <div className="flex min-h-screen w-full flex-col items-center justify-center bg-muted/20 px-4 py-12">
+    <div className="relative flex min-h-screen w-full flex-col items-center justify-center bg-background px-4 py-12">
+      <div className="absolute top-4 right-4 sm:top-6 sm:right-6">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-sm space-y-4">
         {/* Brand Header */}
         <div className="flex flex-col items-center space-y-1.5 text-center">
