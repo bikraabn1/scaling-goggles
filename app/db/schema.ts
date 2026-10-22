@@ -24,7 +24,7 @@ export const userConfigs = ngabsenSchema.table("user_configs", {
   officeLatitude: doublePrecision("office_latitude"),
   officeLongitude: doublePrecision("office_longitude"),
   autoAttendanceEnabled: boolean("auto_attendance_enabled").default(false).notNull(),
-  scheduledHour: integer("scheduled_hour").default(15).notNull(), // Jam WIB (15 untuk 15:00)
+  scheduledTime: text("scheduled_time").default("16:00").notNull(), // Format HH:mm WIB (misal "16:15")
   notifyEmail: text("notify_email"),
   defaultNonCodingActivity: text("default_non_coding_activity"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -37,6 +37,8 @@ export const attendanceRetryQueue = ngabsenSchema.table("attendance_retry_queue"
     .references(() => users.id, { onDelete: "cascade" }),
   date: text("date").notNull(), // YYYY-MM-DD (WIB)
   firstAttemptAt: timestamp("first_attempt_at", { withTimezone: true }).defaultNow().notNull(),
+  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }).defaultNow().notNull(),
+  retryCount: integer("retry_count").default(0).notNull(),
   status: text("status").default("WAITING_RETRY").notNull(), // WAITING_RETRY, RETRIED, SKIPPED
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

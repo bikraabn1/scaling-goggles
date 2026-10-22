@@ -246,31 +246,13 @@ export function UserSettingsDialog({ config, defaultConfig, autoOpen = false }: 
               <div className="space-y-3 pt-1 border-t border-border/50 text-xs">
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1.5">
-                    <Label className="text-[11px] text-muted-foreground">Jadwal Eksekusi (Jam WIB)</Label>
-                    <div className="relative">
-                      <Input
-                        name="scheduledHour"
-                        type="number"
-                        min={0}
-                        max={23}
-                        list="scheduled-hours-list"
-                        defaultValue={config?.scheduledHour ?? 15}
-                        placeholder="15"
-                        className="h-8 text-xs font-mono pr-12"
-                      />
-                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground font-mono pointer-events-none">
-                        :00 WIB
-                      </span>
-                    </div>
-                    <datalist id="scheduled-hours-list">
-                      <option value="14">14:00 WIB (Siang)</option>
-                      <option value="15">15:00 WIB (Sore)</option>
-                      <option value="16">16:00 WIB (Sore)</option>
-                      <option value="17">17:00 WIB (Sore)</option>
-                      <option value="18">18:00 WIB (Malam)</option>
-                      <option value="19">19:00 WIB (Malam)</option>
-                      <option value="20">20:00 WIB (Malam)</option>
-                    </datalist>
+                    <Label className="text-[11px] text-muted-foreground">Jadwal Presensi (WIB)</Label>
+                    <Input
+                      name="scheduledTime"
+                      type="time"
+                      defaultValue={config?.scheduledTime || "16:00"}
+                      className="h-8 text-xs font-mono"
+                    />
                   </div>
 
                   <div className="space-y-1.5">

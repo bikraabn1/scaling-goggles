@@ -30,6 +30,9 @@ export async function action({ request }: Route.ActionArgs) {
   const wibOffsetMs = 7 * 60 * 60 * 1000;
   const wibDate = new Date(now.getTime() + wibOffsetMs);
   const currentHourWIB = wibDate.getUTCHours();
+  const currentMinuteWIB = wibDate.getUTCMinutes();
+  const currentTotalMinutes = currentHourWIB * 60 + currentMinuteWIB;
+
   const year = wibDate.getUTCFullYear();
   const month = String(wibDate.getUTCMonth() + 1).padStart(2, "0");
   const day = String(wibDate.getUTCDate()).padStart(2, "0");
@@ -74,7 +77,7 @@ export async function action({ request }: Route.ActionArgs) {
         continue;
       }
 
-      // 2. Cek apakah ada antrean retry 2 jam
+      // 2. Cek apakah ada antrean retry
       const retryRecord = await db
         .select()
         .from(attendanceRetryQueue)
@@ -87,35 +90,46 @@ export async function action({ request }: Route.ActionArgs) {
         )
         .limit(1);
 
-      const isScheduledHour = config.scheduledHour === currentHourWIB;
       const hasRetryWaiting = retryRecord.length > 0;
 
-      // Jika bukan jam jadwalnya dan juga tidak sedang menunggu retry -> skip
-      if (!isScheduledHour && !hasRetryWaiting) {
+      // Parsing scheduled_time (format "HH:mm")
+      const [schedH, schedM] = (config.scheduledTime || "16:00")
+        .split(":")
+        .map((v) => parseInt(v, 10));
+      const scheduledTotalMinutes = (!isNaN(schedH) ? schedH : 16) * 60 + (!isNaN(schedM) ? schedM : 0);
+
+      // Trigger pertama harus sudah mencapai jadwal waktu user (misal 16:15)
+      const isTimeReached = currentTotalMinutes >= scheduledTotalMinutes;
+
+      // Jika belum waktunya dan belum ada antrean retry -> skip
+      if (!isTimeReached && !hasRetryWaiting) {
         continue;
       }
 
       let isFallbackReview = false;
 
-      // Jika ada retry queue, cek apakah sudah melewati 2 jam (2 * 60 * 60 * 1000 ms)
+      // Jika ada retry queue, cek interval 1 jam (60 menit = 60 * 60 * 1000 ms) sejak lastAttemptAt
       if (hasRetryWaiting) {
         const retry = retryRecord[0];
-        const elapsedMs = now.getTime() - new Date(retry.firstAttemptAt).getTime();
-        const twoHoursMs = 2 * 60 * 60 * 1000;
+        const elapsedSinceLastAttemptMs = now.getTime() - new Date(retry.lastAttemptAt).getTime();
+        const oneHourMs = 60 * 60 * 1000;
 
-        if (elapsedMs < twoHoursMs) {
-          // Belum 2 jam, tunggu run berikutnya
+        if (elapsedSinceLastAttemptMs < oneHourMs) {
+          // Belum 1 jam sejak percobaan sebelumnya, tunggu run berikutnya
           results.push({
             userId: user.id,
             userName: user.name,
-            status: "WAITING_2H_COOLDOWN",
-            message: `Masih dalam periode tunggu 2 jam (${Math.round((twoHoursMs - elapsedMs) / 60000)} menit tersisa).`,
+            status: "WAITING_1H_COOLDOWN",
+            message: `Menunggu retry 1 jam (${Math.round((oneHourMs - elapsedSinceLastAttemptMs) / 60000)} menit lagi).`,
           });
           continue;
         }
 
-        // Sudah lewat 2 jam! Tandai mode fallback jika nanti tetap tidak ada commit
-        isFallbackReview = true;
+        // Sudah 1 jam atau lebih sejak percobaan sebelumnya!
+        // Jika sudah retry minimal 1x sebelumnya dan sekarang masih commit 0, izinkan masuk mode fallback
+        if (retry.retryCount >= 1) {
+          isFallbackReview = true;
+        }
       }
 
       // 3. Ambil commit GitLab
@@ -145,19 +159,38 @@ export async function action({ request }: Route.ActionArgs) {
 
       // 4. Skenario Commit 0
       if (gitlabData.commits.length === 0) {
-        // Percobaan pertama (belum pernah masuk retry queue hari ini)
-        if (!hasRetryWaiting) {
-          // Masukkan ke retry queue
-          await db.insert(attendanceRetryQueue).values({
-            userId: user.id,
-            date: todayDateStr,
-            firstAttemptAt: now,
-            status: "WAITING_RETRY",
-          });
+        // Jika belum masuk mode fallback review (misal baru percobaan 1 atau belum lewat 1 jam kedua)
+        if (!isFallbackReview) {
+          if (!hasRetryWaiting) {
+            // Percobaan pertama commit 0 -> Catat antrean baru
+            await db.insert(attendanceRetryQueue).values({
+              userId: user.id,
+              date: todayDateStr,
+              firstAttemptAt: now,
+              lastAttemptAt: now,
+              retryCount: 1,
+              status: "WAITING_RETRY",
+            });
+          } else {
+            // Percobaan ke-2 commit 0 -> update lastAttemptAt dan tambah retryCount
+            await db
+              .update(attendanceRetryQueue)
+              .set({
+                lastAttemptAt: now,
+                retryCount: retryRecord[0].retryCount + 1,
+                updatedAt: now,
+              })
+              .where(
+                and(
+                  eq(attendanceRetryQueue.userId, user.id),
+                  eq(attendanceRetryQueue.date, todayDateStr)
+                )
+              );
+          }
 
-          // Hitung estimasi jam retry (+2 jam)
-          const retryDate = new Date(wibDate.getTime() + 2 * 60 * 60 * 1000);
-          const retryTimeStr = `${String(retryDate.getUTCHours()).padStart(2, "0")}:${String(retryDate.getUTCMinutes()).padStart(2, "0")} WIB`;
+          // Estimasi jam retry (+1 jam)
+          const nextRetryDate = new Date(wibDate.getTime() + 60 * 60 * 1000);
+          const retryTimeStr = `${String(nextRetryDate.getUTCHours()).padStart(2, "0")}:${String(nextRetryDate.getUTCMinutes()).padStart(2, "0")} WIB`;
 
           await sendWaitingCommitEmail({
             to: targetEmail,
@@ -170,12 +203,12 @@ export async function action({ request }: Route.ActionArgs) {
             userId: user.id,
             userName: user.name,
             status: "PENDING_RETRY_QUEUED",
-            message: "Commit 0 terdeteksi. Jadwal retry 2 jam telah diantrekan dan email dikirim.",
+            message: `Commit 0 terdeteksi. Pengecekan ulang dijadwalkan 1 jam lagi (${retryTimeStr}).`,
           });
           continue;
         }
 
-        // Sudah lewat 2 jam dan tetap 0 commit -> Masuk fallback 5 commit terakhir
+        // Sudah retry dan tetap 0 commit -> Masuk fallback 5 commit terakhir
         if (gitlabData.recentCommits.length === 0) {
           await sendAttendanceErrorEmail({
             to: targetEmail,

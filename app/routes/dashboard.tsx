@@ -140,7 +140,7 @@ export async function action({ request }: Route.ActionArgs) {
     const officeLatitude = parseFloat(formData.get("officeLatitude")?.toString() || "");
     const officeLongitude = parseFloat(formData.get("officeLongitude")?.toString() || "");
     const autoAttendanceEnabled = formData.get("autoAttendanceEnabled") === "true" || formData.get("autoAttendanceEnabled") === "on";
-    const scheduledHour = parseInt(formData.get("scheduledHour")?.toString() || "15", 10);
+    const scheduledTime = formData.get("scheduledTime")?.toString().trim() || "16:00";
     const notifyEmail = formData.get("notifyEmail")?.toString().trim() || null;
     const defaultNonCodingActivity = formData.get("defaultNonCodingActivity")?.toString().trim() || null;
 
@@ -156,7 +156,7 @@ export async function action({ request }: Route.ActionArgs) {
           officeLatitude: !isNaN(officeLatitude) ? officeLatitude : null,
           officeLongitude: !isNaN(officeLongitude) ? officeLongitude : null,
           autoAttendanceEnabled,
-          scheduledHour: !isNaN(scheduledHour) ? scheduledHour : 15,
+          scheduledTime,
           notifyEmail,
           defaultNonCodingActivity,
           updatedAt: new Date(),
@@ -171,7 +171,7 @@ export async function action({ request }: Route.ActionArgs) {
             officeLatitude: !isNaN(officeLatitude) ? officeLatitude : null,
             officeLongitude: !isNaN(officeLongitude) ? officeLongitude : null,
             autoAttendanceEnabled,
-            scheduledHour: !isNaN(scheduledHour) ? scheduledHour : 15,
+            scheduledTime,
             notifyEmail,
             defaultNonCodingActivity,
             updatedAt: new Date(),
