@@ -145,6 +145,23 @@ export async function action({ request }: Route.ActionArgs) {
     const defaultNonCodingActivity = formData.get("defaultNonCodingActivity")?.toString().trim() || null;
 
     try {
+      const updateSet: Record<string, any> = {
+        gitlabBaseUrl,
+        gitlabProjectId,
+        gitlabAuthorName,
+        officeLatitude: !isNaN(officeLatitude) ? officeLatitude : null,
+        officeLongitude: !isNaN(officeLongitude) ? officeLongitude : null,
+        autoAttendanceEnabled,
+        scheduledTime,
+        notifyEmail,
+        defaultNonCodingActivity,
+        updatedAt: new Date(),
+      };
+
+      if (gitlabToken) {
+        updateSet.gitlabToken = gitlabToken;
+      }
+
       await db
         .insert(userConfigs)
         .values({
@@ -163,19 +180,7 @@ export async function action({ request }: Route.ActionArgs) {
         })
         .onConflictDoUpdate({
           target: userConfigs.userId,
-          set: {
-            gitlabBaseUrl,
-            gitlabProjectId,
-            gitlabToken: gitlabToken || sql`user_configs.gitlab_token`,
-            gitlabAuthorName,
-            officeLatitude: !isNaN(officeLatitude) ? officeLatitude : null,
-            officeLongitude: !isNaN(officeLongitude) ? officeLongitude : null,
-            autoAttendanceEnabled,
-            scheduledTime,
-            notifyEmail,
-            defaultNonCodingActivity,
-            updatedAt: new Date(),
-          },
+          set: updateSet,
         });
       return { configSuccess: "Pengaturan berhasil diperbarui." };
     } catch (err: any) {
