@@ -14,7 +14,7 @@ import { AppLogo } from "~/components/app-logo";
 import { ThemeToggle } from "~/components/theme-toggle";
 import { UserSettingsDialog } from "~/components/user-settings-dialog";
 import { AttendanceHistoryDialog } from "~/components/attendance-history-dialog";
-import { Sparkles, RefreshCw, LogOut, Calendar, AlertTriangle, CheckCircle2, User } from "lucide-react";
+import { Sparkles, RefreshCw, LogOut, Calendar, AlertTriangle, CheckCircle2, User, Settings } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import type { Route } from "./+types/dashboard";
 
@@ -35,6 +35,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   } catch (err) {
     console.error("Gagal membaca userConfig dari Supabase:", err);
   }
+
+  const needsSetup = !userConfig?.gitlabProjectId || !userConfig?.gitlabToken;
 
   const gitlabData = await fetchTodayGitLabCommits({
     baseUrl: userConfig?.gitlabBaseUrl,
@@ -96,6 +98,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     user,
     userConfig,
     defaultConfig,
+    needsSetup,
     dateFormatted,
     todayDateStr,
     todayAttendance,
@@ -103,7 +106,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     commits: gitlabData.commits,
     recentCommits: gitlabData.recentCommits,
     filteredCount: gitlabData.filteredCount,
-    gitlabError: gitlabData.error,
+    gitlabError: needsSetup ? undefined : gitlabData.error,
   };
 }
 
@@ -169,6 +172,13 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (intent === "generate") {
     const userConfig = await getUserConfig();
+
+    if (!userConfig?.gitlabProjectId || !userConfig?.gitlabToken) {
+      return {
+        error: "Konfigurasi GitLab Anda belum lengkap. Silakan isi Project ID dan Personal Access Token di menu Pengaturan.",
+      };
+    }
+
     const gitlabData = await fetchTodayGitLabCommits({
       baseUrl: userConfig?.gitlabBaseUrl,
       projectId: userConfig?.gitlabProjectId,
@@ -341,7 +351,11 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
             </div>
 
             <AttendanceHistoryDialog attendances={loaderData.recentAttendances} />
-            <UserSettingsDialog config={loaderData.userConfig} defaultConfig={loaderData.defaultConfig} />
+            <UserSettingsDialog
+              config={loaderData.userConfig}
+              defaultConfig={loaderData.defaultConfig}
+              autoOpen={loaderData.needsSetup}
+            />
             <ThemeToggle />
 
             <Form method="post" action="/logout">
@@ -370,6 +384,17 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle className="text-xs font-semibold">Gagal Menyimpan Pengaturan</AlertTitle>
             <AlertDescription className="text-xs">{data.configError}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Onboarding Notice if GitLab config is missing */}
+        {loaderData.needsSetup && (
+          <Alert className="border-primary/40 bg-primary/10 text-primary shadow-xs">
+            <Settings className="h-4 w-4 text-primary" />
+            <AlertTitle className="text-xs font-semibold">Pengaturan GitLab Diperlukan</AlertTitle>
+            <AlertDescription className="text-xs opacity-90">
+              Silakan lengkapi Project ID dan Personal Access Token GitLab Anda di menu <b>Pengaturan</b> agar sistem dapat menarik commit harian.
+            </AlertDescription>
           </Alert>
         )}
 

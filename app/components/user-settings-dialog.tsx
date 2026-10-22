@@ -25,10 +25,11 @@ interface UserSettingsDialogProps {
     officeLatitude?: string;
     officeLongitude?: string;
   };
+  autoOpen?: boolean;
 }
 
-export function UserSettingsDialog({ config, defaultConfig }: UserSettingsDialogProps) {
-  const [open, setOpen] = useState(false);
+export function UserSettingsDialog({ config, defaultConfig, autoOpen = false }: UserSettingsDialogProps) {
+  const [open, setOpen] = useState(autoOpen);
   const [lat, setLat] = useState(config?.officeLatitude?.toString() || defaultConfig.officeLatitude || "-7.565374884700425");
   const [lng, setLng] = useState(config?.officeLongitude?.toString() || defaultConfig.officeLongitude || "110.81394969592333");
   const [gettingLocation, setGettingLocation] = useState(false);
@@ -90,6 +91,15 @@ export function UserSettingsDialog({ config, defaultConfig }: UserSettingsDialog
             </div>
           </div>
         </DialogHeader>
+
+        {autoOpen && (
+          <div className="rounded-md border border-primary/30 bg-primary/10 p-3 text-xs text-primary">
+            <span className="font-semibold block mb-0.5">Selamat Datang</span>
+            <span className="text-[11px] leading-relaxed opacity-90">
+              Silakan lengkapi Project ID dan Personal Access Token GitLab Anda terlebih dahulu untuk mulai memuat commit dan membuat laporan harian.
+            </span>
+          </div>
+        )}
 
         <Form method="post" onSubmit={() => setOpen(false)} className="space-y-4 py-2">
           <input type="hidden" name="intent" value="save_config" />
