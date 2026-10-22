@@ -76,10 +76,10 @@ SESSION_SECRET=buat_string_acak_panjang_minimal_32_karakter_bebas
 # Konfigurasi GitLab
 # ------------------------------------------------------------------------------
 # URL instance GitLab kantor/kampus Anda (tanpa garis miring di akhir)
-GITLAB_BASE_URL=https://gitlab.perpuskita.id
+GITLAB_BASE_URL=https://gitlab.com
 
 # ID project di GitLab (angka ID repository)
-GITLAB_PROJECT_ID=80
+GITLAB_PROJECT_ID=
 
 # Personal Access Token GitLab
 GITLAB_TOKEN=glpat-xxxxxxxxxxxxxxxxxxxx
@@ -99,8 +99,8 @@ LLM_MODEL=gemini-1.5-flash
 # Koordinat GPS Kantor MagangHub
 # ------------------------------------------------------------------------------
 # Koordinat kantor untuk presensi GPS Kemnaker
-MONEV_LATITUDE=-7.565374884700425
-MONEV_LONGITUDE=110.81394969592333
+MONEV_LATITUDE=-70.134234540700425
+MONEV_LONGITUDE=10.81394960985433
 ```
 
 > **Catatan Keamanan**: Anda **tidak perlu** menuliskan email atau password Kemnaker di file `.env`. Autentikasi dilakukan langsung saat login di browser.

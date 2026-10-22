@@ -34,39 +34,51 @@ export async function authenticateKemnakerMonev(credentials: {
     const state = crypto.randomBytes(32).toString("base64url");
     const authUrl = `https://account.kemnaker.go.id/auth?client_id=79230891-cc02-43c8-964c-b525bce27857&redirect_uri=https%3A%2F%2Fmonev.maganghub.kemnaker.go.id%2Fsso%2Fcallback&response_type=code&scope=basic%20email&state=${state}`;
 
-    // Step 1: Initial GET to obtain session cookies and CSRF token
-    const res1 = await fetch(authUrl, {
-      headers: { "User-Agent": USER_AGENT },
-      redirect: "follow",
-    });
-
+    // Step 1: Initial GET to obtain session cookies and CSRF token dynamically
     const cookieMap: Record<string, string> = {};
-    const setCookieHeaders = res1.headers.getSetCookie?.() || [];
-    setCookieHeaders.forEach((c) => {
-      const [kv] = c.split(";");
-      const [k, v] = kv.split("=");
-      if (k && v) cookieMap[k.trim()] = v.trim();
-    });
-
-    const html1 = await res1.text();
-    const csrfMatch = html1.match(
-      /<meta[^>]*name=["']csrf-token["'][^>]*content=["']([^"']+)["']/i
-    );
-    const csrfToken =
-      process.env.MONEV_CSRF_TOKEN?.trim() ||
-      (csrfMatch ? csrfMatch[1] : "");
-
-    if (!csrfToken) {
-      return {
-        success: false,
-        error: "Gagal menemukan CSRF token dari halaman login Kemnaker. Silakan set MONEV_CSRF_TOKEN di .env.",
-      };
-    }
+    const saveCookies = (headers: Headers) => {
+      headers.getSetCookie?.().forEach((c) => {
+        const [kv] = c.split(";");
+        const [k, v] = kv.split("=");
+        if (k && v) cookieMap[k.trim()] = v.trim();
+      });
+    };
 
     const getCookieHeader = () =>
       Object.entries(cookieMap)
         .map(([k, v]) => `${k}=${v}`)
         .join("; ");
+
+    // Follow redirect manually to preserve OAuth session cookies into /auth/login
+    const res1 = await fetch(authUrl, {
+      headers: { "User-Agent": USER_AGENT },
+      redirect: "manual",
+    });
+    saveCookies(res1.headers);
+
+    const loginPageUrl =
+      res1.headers.get("location") || "https://account.kemnaker.go.id/auth/login";
+    const resLoginPage = await fetch(loginPageUrl, {
+      headers: {
+        "User-Agent": USER_AGENT,
+        Cookie: getCookieHeader(),
+      },
+    });
+    saveCookies(resLoginPage.headers);
+
+    const htmlLogin = await resLoginPage.text();
+    const csrfMatch = htmlLogin.match(
+      /<meta[^>]*name=["']csrf-token["'][^>]*content=["']([^"']+)["']/i
+    );
+    const csrfToken =
+      csrfMatch?.[1] || process.env.MONEV_CSRF_TOKEN?.trim() || "";
+
+    if (!csrfToken) {
+      return {
+        success: false,
+        error: "Gagal menemukan CSRF token dari halaman login Kemnaker.",
+      };
+    }
 
     // Step 2: POST credentials to account.kemnaker.go.id/auth/login
     const loginRes = await fetch("https://account.kemnaker.go.id/auth/login", {
