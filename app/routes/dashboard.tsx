@@ -6,7 +6,7 @@ import { generateDailyReportFromCommits, type DailyReport } from "~/lib/llm.serv
 import { submitToMonevMagangHub, type MonevSubmissionResult } from "~/lib/monev.server";
 import { db } from "~/db/index.server";
 import { attendanceLogs, users, userConfigs, type AttendanceLog, type UserConfig } from "~/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { CommitList } from "~/components/commit-list";
 import { ReportForm } from "~/components/report-form";
 import { Button } from "~/components/ui/button";
@@ -135,7 +135,8 @@ export async function action({ request }: Route.ActionArgs) {
     const gitlabBaseUrl = formData.get("gitlabBaseUrl")?.toString().trim() || null;
     const gitlabProjectId = formData.get("gitlabProjectId")?.toString().trim() || null;
     const gitlabAuthorName = formData.get("gitlabAuthorName")?.toString().trim() || null;
-    const gitlabToken = formData.get("gitlabToken")?.toString().trim() || null;
+    const gitlabTokenRaw = formData.get("gitlabToken")?.toString().trim();
+    const gitlabToken = gitlabTokenRaw !== undefined && gitlabTokenRaw !== "" ? gitlabTokenRaw : null;
     const officeLatitude = parseFloat(formData.get("officeLatitude")?.toString() || "");
     const officeLongitude = parseFloat(formData.get("officeLongitude")?.toString() || "");
     const autoAttendanceEnabled = formData.get("autoAttendanceEnabled") === "true" || formData.get("autoAttendanceEnabled") === "on";
@@ -150,7 +151,7 @@ export async function action({ request }: Route.ActionArgs) {
           userId: user.userId,
           gitlabBaseUrl,
           gitlabProjectId,
-          gitlabToken: gitlabToken || undefined,
+          gitlabToken: gitlabToken || null,
           gitlabAuthorName,
           officeLatitude: !isNaN(officeLatitude) ? officeLatitude : null,
           officeLongitude: !isNaN(officeLongitude) ? officeLongitude : null,
@@ -165,7 +166,7 @@ export async function action({ request }: Route.ActionArgs) {
           set: {
             gitlabBaseUrl,
             gitlabProjectId,
-            ...(gitlabToken ? { gitlabToken } : {}),
+            gitlabToken: gitlabToken || sql`user_configs.gitlab_token`,
             gitlabAuthorName,
             officeLatitude: !isNaN(officeLatitude) ? officeLatitude : null,
             officeLongitude: !isNaN(officeLongitude) ? officeLongitude : null,

@@ -145,12 +145,19 @@ export function UserSettingsDialog({ config, defaultConfig, autoOpen = false }: 
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-[11px] text-muted-foreground">
-                Personal Access Token (Opsional, timpa default .env)
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-[11px] text-muted-foreground">
+                  Personal Access Token (GitLab PAT)
+                </Label>
+                {config?.gitlabToken && (
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                    ✓ Tersimpan di DB
+                  </span>
+                )}
+              </div>
               <Input
                 name="gitlabToken"
-                type="password"
+                type="text"
                 defaultValue={config?.gitlabToken || ""}
                 placeholder="glpat-xxxxxxxxxxxxxxxxxxxx"
                 className="h-8 text-xs font-mono"
