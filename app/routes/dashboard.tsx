@@ -4,6 +4,9 @@ import { requireUserSession, sessionStorage } from "~/lib/auth.server";
 import { fetchTodayGitLabCommits } from "~/lib/gitlab.server";
 import { generateDailyReportFromCommits, type DailyReport } from "~/lib/llm.server";
 import { submitToMonevMagangHub, type MonevSubmissionResult } from "~/lib/monev.server";
+import { db } from "~/db/index.server";
+import { attendanceLogs, users, type AttendanceLog } from "~/db/schema";
+import { eq, and, desc } from "drizzle-orm";
 import { CommitList } from "~/components/commit-list";
 import { ReportForm } from "~/components/report-form";
 import { Button } from "~/components/ui/button";
@@ -18,8 +21,15 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const gitlabData = await fetchTodayGitLabCommits();
 
-  // Tanggal hari ini dalam format Bahasa Indonesia
+  // Tanggal hari ini dalam format Bahasa Indonesia & WIB date string
   const now = new Date();
+  const wibOffsetMs = 7 * 60 * 60 * 1000;
+  const wibDate = new Date(now.getTime() + wibOffsetMs);
+  const year = wibDate.getUTCFullYear();
+  const month = String(wibDate.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(wibDate.getUTCDate()).padStart(2, "0");
+  const todayDateStr = `${year}-${month}-${day}`;
+
   const dateFormatted = new Intl.DateTimeFormat("id-ID", {
     weekday: "long",
     day: "numeric",
@@ -28,9 +38,36 @@ export async function loader({ request }: Route.LoaderArgs) {
     timeZone: "Asia/Jakarta",
   }).format(now);
 
+  let todayAttendance: AttendanceLog | null = null;
+  let recentAttendances: AttendanceLog[] = [];
+
+  try {
+    const todayLogs = await db
+      .select()
+      .from(attendanceLogs)
+      .where(and(eq(attendanceLogs.userId, user.userId), eq(attendanceLogs.date, todayDateStr)))
+      .limit(1);
+
+    if (todayLogs.length > 0) {
+      todayAttendance = todayLogs[0];
+    }
+
+    recentAttendances = await db
+      .select()
+      .from(attendanceLogs)
+      .where(eq(attendanceLogs.userId, user.userId))
+      .orderBy(desc(attendanceLogs.submittedAt))
+      .limit(5);
+  } catch (dbErr) {
+    console.error("Gagal membaca riwayat presensi dari Supabase:", dbErr);
+  }
+
   return {
     user,
     dateFormatted,
+    todayDateStr,
+    todayAttendance,
+    recentAttendances,
     commits: gitlabData.commits,
     recentCommits: gitlabData.recentCommits,
     filteredCount: gitlabData.filteredCount,
@@ -90,12 +127,20 @@ export async function action({ request }: Route.ActionArgs) {
       refreshToken,
     });
 
-    // If token was refreshed during submission, persist new tokens into cookie session
+    // If token was refreshed during submission, persist new tokens into cookie session & Supabase
     let headers: HeadersInit | undefined;
     if (submission.newAccessToken) {
       session.set("monev_access_token", submission.newAccessToken);
       if (submission.newRefreshToken) {
         session.set("monev_refresh_token", submission.newRefreshToken);
+        try {
+          await db
+            .update(users)
+            .set({ monevRefreshToken: submission.newRefreshToken, updatedAt: new Date() })
+            .where(eq(users.id, user.userId));
+        } catch (dbErr) {
+          console.error("Gagal update refresh token ke Supabase:", dbErr);
+        }
       }
       headers = {
         "Set-Cookie": await sessionStorage.commitSession(session),
@@ -112,6 +157,24 @@ export async function action({ request }: Route.ActionArgs) {
         },
       };
       return headers ? new Response(JSON.stringify(responseData), { headers }) : responseData;
+    }
+
+    // Persist successful submission to Supabase attendance_logs
+    try {
+      const nowWib = new Date(Date.now() + 7 * 60 * 60 * 1000);
+      const wibDateStr = `${nowWib.getUTCFullYear()}-${String(nowWib.getUTCMonth() + 1).padStart(2, "0")}-${String(nowWib.getUTCDate()).padStart(2, "0")}`;
+
+      await db.insert(attendanceLogs).values({
+        userId: user.userId,
+        date: submission.data?.date || wibDateStr,
+        activityLog: activity_log,
+        lessonLearned: lesson_learned,
+        obstacles: obstacles,
+        monevAttendanceId: String(submission.data?.id || ""),
+        approvalStatus: submission.data?.approval_status || "PENDING",
+      });
+    } catch (dbErr) {
+      console.error("Gagal mencatat log presensi ke Supabase:", dbErr);
     }
 
     const responseData = {
@@ -140,7 +203,15 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
   );
 
   const data = actionData as any;
-  const report: DailyReport | undefined = data?.report;
+  const report: DailyReport | undefined =
+    data?.report ||
+    (loaderData.todayAttendance
+      ? {
+          uraian_kegiatan: loaderData.todayAttendance.activityLog,
+          pembelajaran: loaderData.todayAttendance.lessonLearned,
+          kendala: loaderData.todayAttendance.obstacles,
+        }
+      : undefined);
   const activeCount = selectedSource === "today" ? loaderData.commits.length : loaderData.recentCommits.length;
 
   return (
@@ -206,6 +277,19 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
             <AlertTitle className="text-xs font-semibold">Gagal Generate Laporan</AlertTitle>
             <AlertDescription className="text-xs">
               {data.error}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Already Submitted Today Banner from Supabase */}
+        {loaderData.todayAttendance && !data?.monevSuccess && (
+          <Alert className="border-emerald-500/40 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 shadow-xs">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <AlertTitle className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+              Presensi Hari Ini ({loaderData.todayAttendance.date}) Telah Tersubmit ke MagangHub
+            </AlertTitle>
+            <AlertDescription className="text-xs text-emerald-700/90 dark:text-emerald-400/90">
+              Status Approval: <span className="font-bold text-foreground">{loaderData.todayAttendance.approvalStatus}</span> • ID Presensi: <span className="font-mono font-bold text-foreground">{loaderData.todayAttendance.monevAttendanceId || "-"}</span> • Tersimpan di database Supabase.
             </AlertDescription>
           </Alert>
         )}

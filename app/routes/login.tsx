@@ -1,6 +1,8 @@
 import { Form, redirect, useActionData, useNavigation } from "react-router";
 import { createUserSession, getSession } from "~/lib/auth.server";
 import { authenticateKemnakerMonev } from "~/lib/kemnaker-auth.server";
+import { db } from "~/db/index.server";
+import { users } from "~/db/schema";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -36,6 +38,31 @@ export async function action({ request }: Route.ActionArgs) {
     return {
       error: authResult.error || "Gagal masuk. Periksa email dan password akun Kemnaker Anda.",
     };
+  }
+
+  // Persist / update user & refresh token to Supabase
+  try {
+    if (authResult.user_id) {
+      await db
+        .insert(users)
+        .values({
+          id: authResult.user_id,
+          email,
+          name: authResult.name || "Peserta Magang",
+          monevRefreshToken: authResult.refresh_token,
+        })
+        .onConflictDoUpdate({
+          target: users.id,
+          set: {
+            email,
+            name: authResult.name || "Peserta Magang",
+            monevRefreshToken: authResult.refresh_token,
+            updatedAt: new Date(),
+          },
+        });
+    }
+  } catch (dbErr) {
+    console.error("Gagal menyimpan user ke Supabase:", dbErr);
   }
 
   return createUserSession(request, {
