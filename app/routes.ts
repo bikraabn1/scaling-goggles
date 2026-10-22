@@ -5,4 +5,5 @@ export default [
   route("login", "routes/login.tsx"),
   route("logout", "routes/logout.tsx"),
   route("dashboard", "routes/dashboard.tsx"),
+  route("api/cron/attendance", "routes/api.cron.attendance.ts"),
 ] satisfies RouteConfig;

@@ -138,6 +138,10 @@ export async function action({ request }: Route.ActionArgs) {
     const gitlabToken = formData.get("gitlabToken")?.toString().trim() || null;
     const officeLatitude = parseFloat(formData.get("officeLatitude")?.toString() || "");
     const officeLongitude = parseFloat(formData.get("officeLongitude")?.toString() || "");
+    const autoAttendanceEnabled = formData.get("autoAttendanceEnabled") === "true" || formData.get("autoAttendanceEnabled") === "on";
+    const scheduledHour = parseInt(formData.get("scheduledHour")?.toString() || "15", 10);
+    const notifyEmail = formData.get("notifyEmail")?.toString().trim() || null;
+    const defaultNonCodingActivity = formData.get("defaultNonCodingActivity")?.toString().trim() || null;
 
     try {
       await db
@@ -150,6 +154,10 @@ export async function action({ request }: Route.ActionArgs) {
           gitlabAuthorName,
           officeLatitude: !isNaN(officeLatitude) ? officeLatitude : null,
           officeLongitude: !isNaN(officeLongitude) ? officeLongitude : null,
+          autoAttendanceEnabled,
+          scheduledHour: !isNaN(scheduledHour) ? scheduledHour : 15,
+          notifyEmail,
+          defaultNonCodingActivity,
           updatedAt: new Date(),
         })
         .onConflictDoUpdate({
@@ -161,6 +169,10 @@ export async function action({ request }: Route.ActionArgs) {
             gitlabAuthorName,
             officeLatitude: !isNaN(officeLatitude) ? officeLatitude : null,
             officeLongitude: !isNaN(officeLongitude) ? officeLongitude : null,
+            autoAttendanceEnabled,
+            scheduledHour: !isNaN(scheduledHour) ? scheduledHour : 15,
+            notifyEmail,
+            defaultNonCodingActivity,
             updatedAt: new Date(),
           },
         });
@@ -201,8 +213,12 @@ export async function action({ request }: Route.ActionArgs) {
       };
     }
 
+    const nonCodingActivity = formData.get("nonCodingActivity")?.toString().trim() || null;
+
     const messages = targetCommits.map((c) => c.title);
-    const result = await generateDailyReportFromCommits(messages);
+    const result = await generateDailyReportFromCommits(messages, {
+      additionalActivity: nonCodingActivity,
+    });
 
     if (result.error) {
       return { error: result.error };
@@ -476,9 +492,24 @@ export default function DashboardPage({ loaderData, actionData }: Route.Componen
                 </p>
               </div>
 
-              <Form method="post">
+              <Form method="post" className="space-y-2.5">
                 <input type="hidden" name="intent" value="generate" />
                 <input type="hidden" name="source" value={selectedSource} />
+
+                {/* Input kegiatan tambahan / non-coding */}
+                <div className="space-y-1">
+                  <label htmlFor="nonCodingActivity" className="text-[10px] font-medium text-muted-foreground">
+                    Aktivitas Tambahan / Non-Coding (Opsional):
+                  </label>
+                  <textarea
+                    id="nonCodingActivity"
+                    name="nonCodingActivity"
+                    rows={2}
+                    placeholder="Contoh: QA testing modul checkout, code review PR teman, sprint planning..."
+                    className="w-full rounded-md border border-input bg-transparent px-2.5 py-1.5 text-xs shadow-2xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+                  />
+                </div>
+
                 <Button
                   type="submit"
                   size="default"

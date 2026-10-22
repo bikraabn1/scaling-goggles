@@ -1,15 +1,19 @@
-import { pgTable, text, timestamp, serial, doublePrecision } from "drizzle-orm/pg-core";
+import { pgSchema, text, timestamp, serial, doublePrecision, boolean, integer } from "drizzle-orm/pg-core";
 
-export const users = pgTable("users", {
+// Dedicated schema for ngabsennn to isolate from other apps on same Supabase DB
+export const ngabsenSchema = pgSchema("ngabsennn");
+
+export const users = ngabsenSchema.table("users", {
   id: text("id").primaryKey(), // SIAPkerja user_id
   email: text("email").notNull(),
   name: text("name").notNull(),
+  monevAccessToken: text("monev_access_token"),
   monevRefreshToken: text("monev_refresh_token"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const userConfigs = pgTable("user_configs", {
+export const userConfigs = ngabsenSchema.table("user_configs", {
   userId: text("user_id")
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
@@ -19,10 +23,25 @@ export const userConfigs = pgTable("user_configs", {
   gitlabAuthorName: text("gitlab_author_name"),
   officeLatitude: doublePrecision("office_latitude"),
   officeLongitude: doublePrecision("office_longitude"),
+  autoAttendanceEnabled: boolean("auto_attendance_enabled").default(false).notNull(),
+  scheduledHour: integer("scheduled_hour").default(15).notNull(), // Jam WIB (15 untuk 15:00)
+  notifyEmail: text("notify_email"),
+  defaultNonCodingActivity: text("default_non_coding_activity"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const attendanceLogs = pgTable("attendance_logs", {
+export const attendanceRetryQueue = ngabsenSchema.table("attendance_retry_queue", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  date: text("date").notNull(), // YYYY-MM-DD (WIB)
+  firstAttemptAt: timestamp("first_attempt_at", { withTimezone: true }).defaultNow().notNull(),
+  status: text("status").default("WAITING_RETRY").notNull(), // WAITING_RETRY, RETRIED, SKIPPED
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const attendanceLogs = ngabsenSchema.table("attendance_logs", {
   id: serial("id").primaryKey(),
   userId: text("user_id")
     .notNull()
@@ -39,5 +58,6 @@ export const attendanceLogs = pgTable("attendance_logs", {
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type UserConfig = typeof userConfigs.$inferSelect;
+export type AttendanceRetry = typeof attendanceRetryQueue.$inferSelect;
 export type AttendanceLog = typeof attendanceLogs.$inferSelect;
 export type NewAttendanceLog = typeof attendanceLogs.$inferInsert;

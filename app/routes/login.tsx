@@ -49,6 +49,7 @@ export async function action({ request }: Route.ActionArgs) {
           id: authResult.user_id,
           email,
           name: authResult.name || "Peserta Magang",
+          monevAccessToken: authResult.access_token,
           monevRefreshToken: authResult.refresh_token,
         })
         .onConflictDoUpdate({
@@ -56,6 +57,7 @@ export async function action({ request }: Route.ActionArgs) {
           set: {
             email,
             name: authResult.name || "Peserta Magang",
+            monevAccessToken: authResult.access_token,
             monevRefreshToken: authResult.refresh_token,
             updatedAt: new Date(),
           },

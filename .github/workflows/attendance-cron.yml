@@ -1,0 +1,28 @@
+name: Trigger Auto Attendance Cron
+
+on:
+  schedule:
+    # Berjalan Senin - Jumat pada pukul 08:00, 09:00, 10:00, 11:00, 12:00 UTC (15:00 - 19:00 WIB)
+    - cron: '0 8,9,10,11,12 * * 1-5'
+  workflow_dispatch: # Memungkinkan trigger manual lewat tombol "Run workflow" di GitHub Actions
+
+jobs:
+  auto-attendance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Ngabsennn Webhook
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://${{ secrets.APP_URL }}/api/cron/attendance" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          echo "Response Body: $BODY"
+          echo "HTTP Status Code: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Cron webhook failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
