@@ -4,6 +4,24 @@ const resendApiKey = process.env.RESEND_API_KEY;
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
 const fromEmail = process.env.RESEND_FROM_EMAIL || "Ngabsennn <onboarding@resend.dev>";
 
+const emailHeaderHtml = `
+  <div style="margin-bottom: 20px; padding-bottom: 14px; border-bottom: 1px solid #e2e8f0;">
+    <table cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td style="vertical-align: middle; padding-right: 10px;">
+          <div style="width: 32px; height: 32px; background-color: #09090b; border: 1px solid #27272a; border-radius: 8px; text-align: center; line-height: 32px; font-weight: 800; color: #ffffff; font-size: 16px; font-family: -apple-system, BlinkMacSystemFont, monospace;">
+            N<span style="color: #10b981;">.</span>
+          </div>
+        </td>
+        <td style="vertical-align: middle;">
+          <span style="font-size: 15px; font-weight: 700; color: #09090b; letter-spacing: -0.3px; display: inline-block;">ngabsennn</span>
+          <span style="font-size: 10px; color: #059669; background-color: #ecfdf5; padding: 2px 6px; border-radius: 9999px; font-weight: 600; margin-left: 6px; border: 1px solid #a7f3d0; vertical-align: middle;">v1.2</span>
+        </td>
+      </tr>
+    </table>
+  </div>
+`;
+
 export interface SendEmailResult {
   success: boolean;
   id?: string;
@@ -32,6 +50,7 @@ export async function sendAttendanceSuccessEmail(params: {
 
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
+      ${emailHeaderHtml}
       <h2 style="color: #0d9488; margin-top: 0;">Presensi Harian Berhasil Disubmit</h2>
       <p>Halo <b>${params.userName}</b>,</p>
       <p>Laporan presensi MagangHub Anda untuk tanggal <b>${params.dateStr}</b> telah berhasil dikirim ke Kemnaker.</p>
@@ -93,6 +112,7 @@ export async function sendWaitingCommitEmail(params: {
   const subject = `[Ngabsennn] Perhatian: Belum Ada Commit Hari Ini (${params.dateStr})`;
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
+      ${emailHeaderHtml}
       <h2 style="color: #f59e0b; margin-top: 0;">Belum Ada Commit Terdeteksi</h2>
       <p>Halo <b>${params.userName}</b>,</p>
       <p>Sistem otomatis Ngabsennn mencoba menjalankan presensi MagangHub untuk tanggal <b>${params.dateStr}</b>, namun <b>belum ada git commit</b> yang terdeteksi di repository Anda hari ini.</p>
@@ -146,6 +166,7 @@ export async function sendAttendanceErrorEmail(params: {
   const subject = `[Ngabsennn PENTING] Gagal Melakukan Presensi Otomatis - ${params.dateStr}`;
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #fee2e2; border-radius: 8px;">
+      ${emailHeaderHtml}
       <h2 style="color: #ef4444; margin-top: 0;">Presensi Otomatis Gagal Disubmit!</h2>
       <p>Halo <b>${params.userName}</b>,</p>
       <p>Terjadi kendala saat sistem mencoba mengirimkan presensi harian MagangHub Anda untuk tanggal <b>${params.dateStr}</b>.</p>

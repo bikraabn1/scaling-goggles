@@ -1,0 +1,346 @@
+{
+  "id": "7b053f0a-c7c6-4934-93b4-bc76fdaa4bd4",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "ngabsennn.attendance_logs": {
+      "name": "attendance_logs",
+      "schema": "ngabsennn",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "activity_log": {
+          "name": "activity_log",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lesson_learned": {
+          "name": "lesson_learned",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "obstacles": {
+          "name": "obstacles",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "monev_attendance_id": {
+          "name": "monev_attendance_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "approval_status": {
+          "name": "approval_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'SUBMITTED'"
+        },
+        "submitted_at": {
+          "name": "submitted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "attendance_logs_user_id_users_id_fk": {
+          "name": "attendance_logs_user_id_users_id_fk",
+          "tableFrom": "attendance_logs",
+          "tableTo": "users",
+          "schemaTo": "ngabsennn",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "ngabsennn.attendance_retry_queue": {
+      "name": "attendance_retry_queue",
+      "schema": "ngabsennn",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "first_attempt_at": {
+          "name": "first_attempt_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "last_attempt_at": {
+          "name": "last_attempt_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "retry_count": {
+          "name": "retry_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'WAITING_RETRY'"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "attendance_retry_queue_user_id_users_id_fk": {
+          "name": "attendance_retry_queue_user_id_users_id_fk",
+          "tableFrom": "attendance_retry_queue",
+          "tableTo": "users",
+          "schemaTo": "ngabsennn",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "ngabsennn.user_configs": {
+      "name": "user_configs",
+      "schema": "ngabsennn",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "gitlab_base_url": {
+          "name": "gitlab_base_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gitlab_project_id": {
+          "name": "gitlab_project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gitlab_token": {
+          "name": "gitlab_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gitlab_author_name": {
+          "name": "gitlab_author_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "office_latitude": {
+          "name": "office_latitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "office_longitude": {
+          "name": "office_longitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "auto_attendance_enabled": {
+          "name": "auto_attendance_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "scheduled_time": {
+          "name": "scheduled_time",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'16:00'"
+        },
+        "notify_email": {
+          "name": "notify_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "default_non_coding_activity": {
+          "name": "default_non_coding_activity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "user_configs_user_id_users_id_fk": {
+          "name": "user_configs_user_id_users_id_fk",
+          "tableFrom": "user_configs",
+          "tableTo": "users",
+          "schemaTo": "ngabsennn",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "ngabsennn.users": {
+      "name": "users",
+      "schema": "ngabsennn",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "monev_access_token": {
+          "name": "monev_access_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "monev_refresh_token": {
+          "name": "monev_refresh_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {
+    "ngabsennn": "ngabsennn"
+  },
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
