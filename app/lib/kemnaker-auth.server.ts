@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { sendAttendanceErrorEmail } from "./email.server";
 
 export interface MonevAuthResult {
   success: boolean;
@@ -11,6 +12,41 @@ export interface MonevAuthResult {
 
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+const BROWSER_HEADERS = {
+  "User-Agent": USER_AGENT,
+  Accept:
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+  "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+  "Sec-CH-UA":
+    '"Chromium";v="131", "Not_A Brand";v="24", "Google Chrome";v="131"',
+  "Sec-CH-UA-Mobile": "?0",
+  "Sec-CH-UA-Platform": '"macOS"',
+  "Sec-Fetch-Dest": "document",
+  "Sec-Fetch-Mode": "navigate",
+  "Sec-Fetch-Site": "none",
+  "Sec-Fetch-User": "?1",
+  "Upgrade-Insecure-Requests": "1",
+};
+
+async function notifyAuthError(errorMessage: string, emailTarget?: string) {
+  const alertEmail = process.env.ADMIN_ALERT_EMAIL?.trim();
+  if (!alertEmail) return;
+
+  const nowWib = new Date(Date.now() + 7 * 60 * 60 * 1000);
+  const dateStr = nowWib.toISOString().split("T")[0];
+
+  try {
+    await sendAttendanceErrorEmail({
+      to: alertEmail,
+      userName: emailTarget || "Admin Ngabsennn",
+      dateStr,
+      errorMessage,
+    });
+  } catch (e) {
+    console.error("[KemnakerAuth] Gagal kirim email alert:", e);
+  }
+}
 
 /**
  * Automates full SSO OAuth2 login against Kemnaker Identity Provider
@@ -51,7 +87,7 @@ export async function authenticateKemnakerMonev(credentials: {
 
     // Follow redirect manually to preserve OAuth session cookies into /auth/login
     const res1 = await fetch(authUrl, {
-      headers: { "User-Agent": USER_AGENT },
+      headers: BROWSER_HEADERS,
       redirect: "manual",
     });
     saveCookies(res1.headers);
@@ -60,11 +96,29 @@ export async function authenticateKemnakerMonev(credentials: {
       res1.headers.get("location") || "https://account.kemnaker.go.id/auth/login";
     const resLoginPage = await fetch(loginPageUrl, {
       headers: {
-        "User-Agent": USER_AGENT,
+        ...BROWSER_HEADERS,
         Cookie: getCookieHeader(),
       },
     });
     saveCookies(resLoginPage.headers);
+
+    if (resLoginPage.status === 403) {
+      const err = "Koneksi ke Kemnaker diblokir Cloudflare (HTTP 403 Forbidden). Coba beberapa saat lagi atau gunakan koneksi lain.";
+      await notifyAuthError(err, username);
+      return { success: false, error: err };
+    }
+
+    if (resLoginPage.status === 429) {
+      const err = "Terlalu banyak permintaan ke server Kemnaker (HTTP 429 Too Many Requests). Tunggu beberapa menit.";
+      await notifyAuthError(err, username);
+      return { success: false, error: err };
+    }
+
+    if (resLoginPage.status >= 500) {
+      const err = `Server login Kemnaker sedang gangguan/maintenance (HTTP ${resLoginPage.status}).`;
+      await notifyAuthError(err, username);
+      return { success: false, error: err };
+    }
 
     const htmlLogin = await resLoginPage.text();
     const csrfMatch = htmlLogin.match(
@@ -74,6 +128,9 @@ export async function authenticateKemnakerMonev(credentials: {
       csrfMatch?.[1] || process.env.MONEV_CSRF_TOKEN?.trim() || "";
 
     if (!csrfToken) {
+      const snippet = htmlLogin.slice(0, 300).replace(/\s+/g, " ");
+      const detail = `Gagal menemukan CSRF token (HTTP ${resLoginPage.status}). Cuplikan HTML: ${snippet}`;
+      await notifyAuthError(detail, username);
       return {
         success: false,
         error: "Gagal menemukan CSRF token dari halaman login Kemnaker.",
@@ -84,13 +141,13 @@ export async function authenticateKemnakerMonev(credentials: {
     const loginRes = await fetch("https://account.kemnaker.go.id/auth/login", {
       method: "POST",
       headers: {
+        ...BROWSER_HEADERS,
         "Content-Type": "application/json",
         Accept: "application/json, text/plain, */*",
         "X-CSRF-TOKEN": csrfToken,
         Cookie: getCookieHeader(),
         Origin: "https://account.kemnaker.go.id",
         Referer: "https://account.kemnaker.go.id/auth/login",
-        "User-Agent": USER_AGENT,
       },
       body: JSON.stringify({
         username,
@@ -107,9 +164,11 @@ export async function authenticateKemnakerMonev(credentials: {
     const loginData = (await loginRes.json().catch(() => null)) as any;
     if (!loginRes.ok || !loginData?.data?.authenticated) {
       const msg = loginData?.message || "Email atau password Kemnaker salah.";
+      const err = `Login Kemnaker gagal: ${msg}`;
+      await notifyAuthError(err, username);
       return {
         success: false,
-        error: `Login Kemnaker gagal: ${msg}`,
+        error: err,
       };
     }
 
@@ -117,16 +176,18 @@ export async function authenticateKemnakerMonev(credentials: {
     const authRes2 = await fetch(authUrl, {
       headers: {
         Cookie: getCookieHeader(),
-        "User-Agent": USER_AGENT,
+        ...BROWSER_HEADERS,
       },
       redirect: "manual",
     });
 
     const targetUrl = authRes2.headers.get("location");
     if (!targetUrl) {
+      const err = "Gagal mendapatkan redirect authorization code dari Kemnaker.";
+      await notifyAuthError(err, username);
       return {
         success: false,
-        error: "Gagal mendapatkan redirect authorization code dari Kemnaker.",
+        error: err,
       };
     }
 
@@ -135,9 +196,11 @@ export async function authenticateKemnakerMonev(credentials: {
     const returnedState = urlObj.searchParams.get("state");
 
     if (!code || !returnedState) {
+      const err = "Authorization code atau state tidak ditemukan pada respon OAuth.";
+      await notifyAuthError(err, username);
       return {
         success: false,
-        error: "Authorization code atau state tidak ditemukan pada respon OAuth.",
+        error: err,
       };
     }
 
@@ -159,11 +222,11 @@ export async function authenticateKemnakerMonev(credentials: {
     const tokenData = (await tokenRes.json().catch(() => null)) as any;
 
     if (!tokenRes.ok || !tokenData?.access_token) {
+      const err = tokenData?.message || `Token exchange gagal dengan status HTTP ${tokenRes.status}`;
+      await notifyAuthError(err, username);
       return {
         success: false,
-        error:
-          tokenData?.message ||
-          `Token exchange gagal dengan status HTTP ${tokenRes.status}`,
+        error: err,
       };
     }
 
@@ -186,9 +249,11 @@ export async function authenticateKemnakerMonev(credentials: {
       name: tokenData.name,
     };
   } catch (err: any) {
+    const errorMsg = `Gagal proses login Kemnaker: ${err.message || String(err)}`;
+    await notifyAuthError(errorMsg, username);
     return {
       success: false,
-      error: `Gagal proses login Kemnaker: ${err.message || String(err)}`,
+      error: errorMsg,
     };
   }
 }
